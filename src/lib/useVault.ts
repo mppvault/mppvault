@@ -64,7 +64,10 @@ async function sendAndConfirm(
   tx.feePayer = payer;
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
   const signed = await signTransaction(tx);
-  const sig = await connection.sendRawTransaction(signed.serialize());
+  const sig = await connection.sendRawTransaction(signed.serialize(), {
+    skipPreflight: true,
+    preflightCommitment: "confirmed",
+  });
   await connection.confirmTransaction(sig, "confirmed");
   return sig;
 }
@@ -113,10 +116,20 @@ export function useVault() {
         let vaultUsdcBalance = 0;
         try {
           const conn = getConnection();
+          // try both the vault PDA ATA and all token accounts owned by vault
           const vaultATA = findAssociatedTokenAddress(v.publicKey, USDC_MINT);
-          const bal = await conn.getTokenAccountBalance(vaultATA);
-          vaultUsdcBalance = Number(bal.value.uiAmount ?? 0);
-        } catch { /* ATA not initialized yet */ }
+          try {
+            const bal = await conn.getTokenAccountBalance(vaultATA);
+            vaultUsdcBalance = Number(bal.value.uiAmount ?? 0);
+          } catch {
+            // ATA might not exist, try getTokenAccountsByOwner
+            const accounts = await conn.getTokenAccountsByOwner(v.publicKey, { mint: USDC_MINT });
+            for (const acc of accounts.value) {
+              const bal = await conn.getTokenAccountBalance(acc.pubkey);
+              vaultUsdcBalance += Number(bal.value.uiAmount ?? 0);
+            }
+          }
+        } catch { /* no USDC in vault yet */ }
 
         const totalBalance = vaultUsdcBalance > 0 ? vaultUsdcBalance : subs.reduce((s, a) => s + a.balance, 0);
         const activeAgents = subs.filter(
