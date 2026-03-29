@@ -8,6 +8,7 @@ import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 const navItems = [
   { label: "overview", href: "/dashboard", icon: "◈" },
   { label: "sub-accounts", href: "/dashboard/accounts", icon: "⬡" },
+  { label: "marketplace", href: "/dashboard/marketplace", icon: "◆" },
   { label: "whitelist", href: "/dashboard/whitelist", icon: "◎" },
   { label: "transactions", href: "/dashboard/transactions", icon: "↻" },
   { label: "guide", href: "/dashboard/guide", icon: "?" },
