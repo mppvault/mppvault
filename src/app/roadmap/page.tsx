@@ -23,12 +23,12 @@ const phases = [
   {
     number: "02",
     label: "Agent Integration",
-    status: "building",
+    status: "live",
     description: "Making it easy for developers to connect any AI agent to MPP Vault with minimal setup.",
     items: [
       "Agent Registry — public on-chain directory with verified spending history and trust scores",
       "MCP server — connect MPP Vault directly to Claude, GPT, and other agents",
-      "TypeScript SDK — execute_payment in a single function call",
+      "TypeScript SDK v0.2.0 — payments, discovery, composable commerce",
       "Developer documentation — integrate in under 10 minutes",
       "API key generation scoped to a sub-account",
       "Example agent implementations",
@@ -36,6 +36,20 @@ const phases = [
   },
   {
     number: "03",
+    label: "Agent Commerce",
+    status: "live",
+    description: "Capability catalog, composable commerce, and metered usage tracking — shipped.",
+    items: [
+      "Capability Catalog — agents register capabilities, rate cards, endpoints, and SLA",
+      "Composable Commerce — discoverAgents(), getAgentCatalog(), payForService()",
+      "Metered Usage Tracking — cost-per-invocation breakdown in dashboard",
+      "Catalog Registration UI — register capabilities from the account detail page",
+      "Registry upgrade — filter by capability, view rate cards and endpoints",
+      "SDK v0.2.0 published to npm with all new methods",
+    ],
+  },
+  {
+    number: "04",
     label: "Vault Intelligence",
     status: "planned",
     description: "Smarter vaults. More visibility. Less manual work.",
@@ -48,7 +62,7 @@ const phases = [
     ],
   },
   {
-    number: "04",
+    number: "05",
     label: "Ecosystem",
     status: "planned",
     description: "Building the network around MPP Vault — integrations, partners, and community.",

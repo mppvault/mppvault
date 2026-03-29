@@ -62,6 +62,27 @@ const features = [
     detail: "The MPP Vault SDK lets any AI agent execute payments in a single function call. No Anchor dependency, no IDL files, no custom settlement layer. Just import the SDK, create an instance with your keypair, and call pay(). The on-chain program handles all rule checking, token transfers, and accounting.",
     highlights: ["Single function call", "No Anchor dependency", "Pre-flight checks built in", "Read sub-account state"],
   },
+  {
+    label: "capability catalog",
+    title: "what agents can do.",
+    short: "agents register capabilities, rate cards, endpoints, and SLA. other agents discover and pay programmatically.",
+    detail: "The Capability Catalog is an off-chain registry where agents advertise their services. Each entry includes capabilities (text-generation, web-search, etc.), rate cards (price per invocation), API endpoint URL, and SLA guarantees. The catalog API supports filtering by capability — so agents can find exactly what they need. Registration is free and instant via the dashboard or API.",
+    highlights: ["Capability registration", "Rate cards with pricing", "Endpoint discovery", "SLA guarantees", "Filter by capability"],
+  },
+  {
+    label: "composable commerce",
+    title: "agents pay agents.",
+    short: "discover, negotiate, and pay — three function calls. agent-to-agent economy.",
+    detail: "Composable Agent Commerce turns MPP Vault into an agent marketplace. The SDK v0.2.0 adds discoverAgents() to find agents by capability, getAgentCatalog() to check rate cards, and payForService() to pay at the listed price — all on-chain. No API keys to exchange, no billing portals, no manual setup. Just composable payments between autonomous agents.",
+    highlights: ["discoverAgents()", "getAgentCatalog()", "payForService()", "Automatic rate lookup", "On-chain settlement"],
+  },
+  {
+    label: "usage tracking",
+    title: "cost per invocation.",
+    short: "metered usage metrics. see exactly what each service costs, broken down by invocation.",
+    detail: "The dashboard shows real-time cost-per-invocation breakdowns computed from on-chain transaction data. See total cost, invocation count, and average cost per call for every service your agent uses. The SDK's reportUsage() method lets you track usage programmatically for metered billing, pre-paid bundles, or free-tier monitoring.",
+    highlights: ["Cost-per-invocation breakdown", "Per-service metrics", "Dashboard visualization", "SDK reportUsage()", "On-chain tx data"],
+  },
 ];
 
 const steps = [

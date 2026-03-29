@@ -79,6 +79,8 @@ export interface MppVaultConfig {
   programId?: PublicKey | string;
   /** Agent keypair used to sign payment transactions */
   agentKeypair: Keypair;
+  /** Base URL for the MPP Vault catalog API (defaults to https://mppvault.com) */
+  catalogApiUrl?: string;
 }
 
 export interface SubAccountInfo {
@@ -122,12 +124,67 @@ export interface PaymentCheck {
   reason?: string;
 }
 
+export interface RateCard {
+  /** Capability name */
+  capability: string;
+  /** Price in USDC per invocation */
+  priceUsdc: number;
+  /** Pricing unit (e.g. "per-call", "per-1k-tokens") */
+  unit: string;
+}
+
+export interface AgentCatalogEntry {
+  /** Sub-account address of the agent */
+  subAccountAddress: string;
+  /** Human-readable agent name */
+  agentName: string;
+  /** Agent identifier */
+  agentId: string;
+  /** Description of the agent's services */
+  description: string;
+  /** API endpoint URL */
+  endpoint: string;
+  /** List of capabilities offered */
+  capabilities: string[];
+  /** Pricing for each capability */
+  rateCards: RateCard[];
+  /** Service level agreement */
+  sla: { uptimePercent: number; avgResponseMs: number; maxResponseMs: number };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UsageRecord {
+  /** Transaction signature */
+  signature: string;
+  /** Sub-account address */
+  subAccountAddress: string;
+  /** Capability invoked */
+  capability: string;
+  /** Amount paid in USDC */
+  amountUsdc: number;
+  /** Recipient address */
+  recipient: string;
+  /** ISO timestamp */
+  timestamp: string;
+}
+
+export interface ServicePaymentResult extends PaymentResult {
+  /** The capability that was paid for */
+  capability: string;
+  /** The rate card price used */
+  priceUsdc: number;
+}
+
 // ── SDK ───────────────────────────────────────────
 
 export class MppVaultSDK {
   readonly connection: Connection;
   readonly programId: PublicKey;
   readonly agent: Keypair;
+  readonly catalogApiUrl: string;
+
+  private usageLog: UsageRecord[] = [];
 
   constructor(config: MppVaultConfig) {
     this.connection = config.connection;
@@ -138,6 +195,7 @@ export class MppVaultSDK {
           ? new PublicKey(config.programId)
           : config.programId;
     this.agent = config.agentKeypair;
+    this.catalogApiUrl = config.catalogApiUrl || "https://mppvault.com";
   }
 
   /**
@@ -310,5 +368,123 @@ export class MppVaultSDK {
       };
 
     return { allowed: true };
+  }
+
+  /**
+   * Discover agents that offer a specific capability.
+   *
+   * Queries the MPP Vault catalog API to find agents
+   * registered with the given capability.
+   *
+   * @param capability - The capability to search for (e.g. "text-generation")
+   * @returns List of agents offering that capability
+   */
+  async discoverAgents(capability: string): Promise<AgentCatalogEntry[]> {
+    const url = `${this.catalogApiUrl}/api/catalog?capability=${encodeURIComponent(capability)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Catalog API error: ${res.status}`);
+    return res.json();
+  }
+
+  /**
+   * Get the full catalog entry for a specific agent.
+   *
+   * @param subAccountAddress - The agent's sub-account address
+   * @returns The agent's catalog entry with capabilities, rate cards, and SLA
+   */
+  async getAgentCatalog(
+    subAccountAddress: string,
+  ): Promise<AgentCatalogEntry | null> {
+    const url = `${this.catalogApiUrl}/api/catalog?address=${encodeURIComponent(subAccountAddress)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Catalog API error: ${res.status}`);
+    const entries: AgentCatalogEntry[] = await res.json();
+    return entries[0] ?? null;
+  }
+
+  /**
+   * Pay an agent for a specific capability at its advertised rate.
+   *
+   * Looks up the agent's rate card, verifies the capability exists,
+   * and executes the payment at the listed price.
+   *
+   * @param subAccountAddress - Your sub-account (the payer)
+   * @param agentAddress      - The agent to pay (recipient's sub-account)
+   * @param capability        - The capability to pay for
+   * @returns Payment result including the capability and price
+   */
+  async payForService(
+    subAccountAddress: string | PublicKey,
+    agentAddress: string,
+    capability: string,
+  ): Promise<ServicePaymentResult> {
+    const catalog = await this.getAgentCatalog(agentAddress);
+    if (!catalog) throw new Error(`Agent ${agentAddress} not found in catalog`);
+
+    const rateCard = catalog.rateCards.find(
+      (r) => r.capability.toLowerCase() === capability.toLowerCase(),
+    );
+    if (!rateCard)
+      throw new Error(
+        `Agent ${agentAddress} does not offer capability: ${capability}`,
+      );
+
+    const agentInfo = await this.connection.getAccountInfo(
+      new PublicKey(agentAddress),
+    );
+    if (!agentInfo) throw new Error("Agent sub-account not found on-chain");
+    const vaultPubkey = new PublicKey(agentInfo.data.slice(8, 40));
+
+    const result = await this.pay(
+      subAccountAddress,
+      vaultPubkey,
+      rateCard.priceUsdc,
+    );
+
+    const record: UsageRecord = {
+      signature: result.signature,
+      subAccountAddress:
+        typeof subAccountAddress === "string"
+          ? subAccountAddress
+          : subAccountAddress.toBase58(),
+      capability,
+      amountUsdc: rateCard.priceUsdc,
+      recipient: agentAddress,
+      timestamp: new Date().toISOString(),
+    };
+    this.usageLog.push(record);
+
+    return {
+      ...result,
+      capability,
+      priceUsdc: rateCard.priceUsdc,
+    };
+  }
+
+  /**
+   * Report a usage event for metered tracking.
+   *
+   * Records a usage entry locally and returns the full log.
+   * Can be used to track capability invocations independently
+   * of payments (e.g. for free-tier usage, pre-paid bundles).
+   *
+   * @param record - Usage details (capability, amount, recipient)
+   * @returns The complete usage log
+   */
+  reportUsage(record: Omit<UsageRecord, "timestamp">): UsageRecord[] {
+    this.usageLog.push({
+      ...record,
+      timestamp: new Date().toISOString(),
+    });
+    return [...this.usageLog];
+  }
+
+  /**
+   * Get all recorded usage events.
+   *
+   * @returns The complete usage log
+   */
+  getUsageLog(): UsageRecord[] {
+    return [...this.usageLog];
   }
 }

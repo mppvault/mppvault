@@ -1,9 +1,11 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import StatCard from "@/components/dashboard/StatCard";
 import { useVault } from "@/lib/useVault";
+import { fetchAgentCatalog, registerCatalogEntry, ALL_CAPABILITIES } from "@/lib/catalog";
+import type { AgentCatalogEntry, RateCard } from "@/lib/catalog";
 
 export default function AccountDetailPage({
   params,
@@ -99,7 +101,125 @@ export default function AccountDetailPage({
     setTimeout(() => setCopied(null), 2000);
   };
 
+  // Catalog registration state
+  const [catalogEntry, setCatalogEntry] = useState<AgentCatalogEntry | null>(null);
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [catDescription, setCatDescription] = useState("");
+  const [catEndpoint, setCatEndpoint] = useState("");
+  const [catCapabilities, setCatCapabilities] = useState<string[]>([]);
+  const [catRateCards, setCatRateCards] = useState<RateCard[]>([]);
+  const [catUptimePercent, setCatUptimePercent] = useState("99");
+  const [catAvgResponseMs, setCatAvgResponseMs] = useState("500");
+  const [catMaxResponseMs, setCatMaxResponseMs] = useState("5000");
+  const [catLoading, setCatLoading] = useState(false);
+  const [catError, setCatError] = useState("");
+  const [catSuccess, setCatSuccess] = useState(false);
+
   const account = subAccounts.find((a) => a.id === id);
+
+  useEffect(() => {
+    if (account) {
+      fetchAgentCatalog(account.id)
+        .then((entry) => {
+          if (entry) {
+            setCatalogEntry(entry);
+            setCatDescription(entry.description);
+            setCatEndpoint(entry.endpoint);
+            setCatCapabilities(entry.capabilities);
+            setCatRateCards(entry.rateCards);
+            setCatUptimePercent(entry.sla.uptimePercent.toString());
+            setCatAvgResponseMs(entry.sla.avgResponseMs.toString());
+            setCatMaxResponseMs(entry.sla.maxResponseMs.toString());
+          }
+        })
+        .catch(() => {});
+    }
+  }, [account?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCatalogRegister = async () => {
+    if (!account || !catCapabilities.length) return;
+    setCatLoading(true);
+    setCatError("");
+    setCatSuccess(false);
+    try {
+      const result = await registerCatalogEntry({
+        subAccountAddress: account.id,
+        agentName: account.name,
+        agentId: account.agentId,
+        description: catDescription,
+        endpoint: catEndpoint,
+        capabilities: catCapabilities,
+        rateCards: catRateCards,
+        sla: {
+          uptimePercent: Number(catUptimePercent),
+          avgResponseMs: Number(catAvgResponseMs),
+          maxResponseMs: Number(catMaxResponseMs),
+        },
+      });
+      setCatalogEntry(result);
+      setCatSuccess(true);
+      setTimeout(() => setCatSuccess(false), 3000);
+    } catch (e: unknown) {
+      setCatError(e instanceof Error ? e.message : "Failed to register");
+    } finally {
+      setCatLoading(false);
+    }
+  };
+
+  const toggleCapability = (cap: string) => {
+    setCatCapabilities((prev) =>
+      prev.includes(cap) ? prev.filter((c) => c !== cap) : [...prev, cap],
+    );
+  };
+
+  const addRateCard = () => {
+    setCatRateCards((prev) => [...prev, { capability: "", priceUsdc: 0, unit: "per-call" }]);
+  };
+
+  const updateRateCard = (idx: number, field: keyof RateCard, value: string | number) => {
+    setCatRateCards((prev) =>
+      prev.map((rc, i) => (i === idx ? { ...rc, [field]: value } : rc)),
+    );
+  };
+
+  const removeRateCard = (idx: number) => {
+    setCatRateCards((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // Usage metrics computed from transactions
+  const accountTxs = useMemo(
+    () => (account ? transactions.filter((tx) => tx.subAccountId === account.id) : []),
+    [transactions, account],
+  );
+
+  const usageMetrics = useMemo(() => {
+    if (!accountTxs.length) return null;
+
+    const byRecipient = new Map<string, { label: string; total: number; count: number }>();
+    for (const tx of accountTxs) {
+      const key = tx.to;
+      const existing = byRecipient.get(key) || { label: tx.toLabel || tx.to.slice(0, 8), total: 0, count: 0 };
+      existing.total += tx.amount;
+      existing.count += 1;
+      byRecipient.set(key, existing);
+    }
+
+    const breakdown = Array.from(byRecipient.entries())
+      .map(([address, data]) => ({
+        address,
+        label: data.label,
+        totalUsdc: data.total,
+        invocations: data.count,
+        avgCost: data.total / data.count,
+      }))
+      .sort((a, b) => b.totalUsdc - a.totalUsdc);
+
+    const totalCost = breakdown.reduce((s, b) => s + b.totalUsdc, 0);
+    const totalInvocations = breakdown.reduce((s, b) => s + b.invocations, 0);
+    const avgCostPerInvocation = totalInvocations > 0 ? totalCost / totalInvocations : 0;
+
+    return { breakdown, totalCost, totalInvocations, avgCostPerInvocation };
+  }, [accountTxs]);
 
   if (!account) {
     return (
@@ -115,9 +235,6 @@ export default function AccountDetailPage({
     );
   }
 
-  const accountTxs = transactions.filter(
-    (tx) => tx.subAccountId === account.id,
-  );
   const pct = (account.spent / account.totalBudget) * 100;
 
   const handlePause = async () => {
@@ -176,6 +293,11 @@ export default function AccountDetailPage({
               >
                 {account.status}
               </span>
+              {catalogEntry && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full text-[var(--accent)] bg-[var(--accent)]/[0.06] border border-[var(--accent)]/20">
+                  catalog registered
+                </span>
+              )}
             </div>
             <p className="mt-1 text-[13px] text-neutral-600">
               {account.agentId}
@@ -301,6 +423,55 @@ export default function AccountDetailPage({
           />
         </div>
       </div>
+
+      {/* Usage Metrics */}
+      {usageMetrics && (
+        <div className="mt-6">
+          <h3 className="text-[10px] text-neutral-600 uppercase tracking-[0.12em] mb-4">
+            usage metrics
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <div className="liquid-glass rounded-2xl p-5">
+              <span className="text-[10px] text-neutral-600 uppercase tracking-[0.15em]">total cost</span>
+              <p className="text-[24px] num font-bold text-white leading-none mt-2">${usageMetrics.totalCost.toFixed(2)}</p>
+            </div>
+            <div className="liquid-glass rounded-2xl p-5">
+              <span className="text-[10px] text-neutral-600 uppercase tracking-[0.15em]">invocations</span>
+              <p className="text-[24px] num font-bold text-white leading-none mt-2">{usageMetrics.totalInvocations}</p>
+            </div>
+            <div className="liquid-glass rounded-2xl p-5">
+              <span className="text-[10px] text-neutral-600 uppercase tracking-[0.15em]">avg cost / call</span>
+              <p className="text-[24px] num font-bold text-[var(--accent)] leading-none mt-2">${usageMetrics.avgCostPerInvocation.toFixed(4)}</p>
+            </div>
+          </div>
+
+          <div className="liquid-glass rounded-2xl overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-white/[0.06]">
+                  <th className="px-5 py-3 text-left text-[10px] font-medium text-neutral-600 uppercase tracking-[0.1em]">service</th>
+                  <th className="px-5 py-3 text-right text-[10px] font-medium text-neutral-600 uppercase tracking-[0.1em]">invocations</th>
+                  <th className="px-5 py-3 text-right text-[10px] font-medium text-neutral-600 uppercase tracking-[0.1em]">total cost</th>
+                  <th className="px-5 py-3 text-right text-[10px] font-medium text-neutral-600 uppercase tracking-[0.1em]">avg / call</th>
+                </tr>
+              </thead>
+              <tbody>
+                {usageMetrics.breakdown.map((row, i) => (
+                  <tr key={row.address} className={`transition-colors hover:bg-white/[0.02] ${i < usageMetrics.breakdown.length - 1 ? "border-b border-white/[0.04]" : ""}`}>
+                    <td className="px-5 py-3">
+                      <span className="text-[13px] text-white">{row.label}</span>
+                      <span className="text-[11px] text-neutral-700 ml-2 font-mono">{row.address.slice(0, 6)}...{row.address.slice(-4)}</span>
+                    </td>
+                    <td className="px-5 py-3 text-right text-[13px] num text-white">{row.invocations}</td>
+                    <td className="px-5 py-3 text-right text-[13px] num text-white">${row.totalUsdc.toFixed(2)}</td>
+                    <td className="px-5 py-3 text-right text-[13px] num text-neutral-400">${row.avgCost.toFixed(4)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="liquid-glass rounded-2xl p-5">
@@ -434,6 +605,201 @@ export default function AccountDetailPage({
               </div>
             );
           })()}
+        </div>
+      </div>
+
+      {/* Capability Catalog Registration */}
+      <div className="mt-6">
+        <div className="liquid-glass rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <span className="text-[var(--accent)] text-[16px]">◆</span>
+              <h3 className="text-[14px] font-semibold tracking-tight">capability catalog</h3>
+            </div>
+            <button
+              onClick={() => setShowCatalog(!showCatalog)}
+              className="text-[11px] text-[var(--accent)] hover:underline transition-colors"
+            >
+              {showCatalog ? "cancel" : catalogEntry ? "edit" : "register"}
+            </button>
+          </div>
+
+          {catalogEntry && !showCatalog && (
+            <div className="space-y-3">
+              {catalogEntry.capabilities.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {catalogEntry.capabilities.map((cap) => (
+                    <span key={cap} className="text-[10px] text-[var(--accent)] bg-[var(--accent)]/[0.08] px-2 py-0.5 rounded-full">
+                      {cap}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {catalogEntry.endpoint && (
+                <div className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/[0.04] px-4 py-3">
+                  <span className="text-[13px] text-neutral-500">endpoint</span>
+                  <span className="text-[12px] text-[var(--accent)] font-mono">{catalogEntry.endpoint}</span>
+                </div>
+              )}
+              {catalogEntry.rateCards.length > 0 && (
+                <div className="space-y-1">
+                  {catalogEntry.rateCards.map((rc) => (
+                    <div key={rc.capability} className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/[0.04] px-4 py-3">
+                      <span className="text-[13px] text-neutral-400">{rc.capability}</span>
+                      <span className="text-[13px] text-white num">${rc.priceUsdc} / {rc.unit}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl bg-white/[0.02] border border-white/[0.04] px-3 py-2 text-center">
+                  <p className="text-[12px] text-white num">{catalogEntry.sla.uptimePercent}%</p>
+                  <p className="text-[9px] text-neutral-600">uptime</p>
+                </div>
+                <div className="rounded-xl bg-white/[0.02] border border-white/[0.04] px-3 py-2 text-center">
+                  <p className="text-[12px] text-white num">{catalogEntry.sla.avgResponseMs}ms</p>
+                  <p className="text-[9px] text-neutral-600">avg response</p>
+                </div>
+                <div className="rounded-xl bg-white/[0.02] border border-white/[0.04] px-3 py-2 text-center">
+                  <p className="text-[12px] text-white num">{catalogEntry.sla.maxResponseMs}ms</p>
+                  <p className="text-[9px] text-neutral-600">max response</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!catalogEntry && !showCatalog && (
+            <p className="text-[13px] text-neutral-600">
+              register your agent&apos;s capabilities, rate cards, and endpoint in the catalog so other agents can discover and pay for your services.
+            </p>
+          )}
+
+          {showCatalog && (
+            <div className="space-y-4 mt-2">
+              <div>
+                <span className="text-[10px] text-neutral-600 uppercase tracking-[0.12em]">description</span>
+                <textarea
+                  placeholder="What does your agent do?"
+                  value={catDescription}
+                  onChange={(e) => setCatDescription(e.target.value)}
+                  className="w-full mt-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-[13px] text-white placeholder-neutral-700 outline-none focus:border-[var(--accent)]/30 transition-colors resize-none h-20"
+                />
+              </div>
+
+              <div>
+                <span className="text-[10px] text-neutral-600 uppercase tracking-[0.12em]">endpoint url</span>
+                <input
+                  type="text"
+                  placeholder="https://api.your-agent.com/v1"
+                  value={catEndpoint}
+                  onChange={(e) => setCatEndpoint(e.target.value)}
+                  className="w-full mt-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-[13px] text-white placeholder-neutral-700 outline-none focus:border-[var(--accent)]/30 transition-colors font-mono"
+                />
+              </div>
+
+              <div>
+                <span className="text-[10px] text-neutral-600 uppercase tracking-[0.12em]">capabilities</span>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {ALL_CAPABILITIES.map((cap) => (
+                    <button
+                      key={cap}
+                      onClick={() => toggleCapability(cap)}
+                      className={`text-[11px] px-3 py-1 rounded-full transition-all ${
+                        catCapabilities.includes(cap)
+                          ? "bg-[var(--accent)]/[0.15] text-[var(--accent)] border border-[var(--accent)]/30"
+                          : "bg-white/[0.04] text-neutral-500 border border-white/[0.06] hover:text-white"
+                      }`}
+                    >
+                      {cap}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-neutral-600 uppercase tracking-[0.12em]">rate cards</span>
+                  <button onClick={addRateCard} className="text-[11px] text-[var(--accent)] hover:underline">+ add</button>
+                </div>
+                <div className="space-y-2 mt-2">
+                  {catRateCards.map((rc, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <select
+                        value={rc.capability}
+                        onChange={(e) => updateRateCard(idx, "capability", e.target.value)}
+                        className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-[12px] text-white outline-none flex-1"
+                      >
+                        <option value="">select capability</option>
+                        {catCapabilities.map((cap) => (
+                          <option key={cap} value={cap}>{cap}</option>
+                        ))}
+                      </select>
+                      <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2">
+                        <span className="text-[12px] text-neutral-500">$</span>
+                        <input
+                          type="number"
+                          placeholder="0.00"
+                          value={rc.priceUsdc || ""}
+                          onChange={(e) => updateRateCard(idx, "priceUsdc", Number(e.target.value))}
+                          className="bg-transparent text-[12px] text-white outline-none w-16 num"
+                          step="0.001"
+                        />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="per-call"
+                        value={rc.unit}
+                        onChange={(e) => updateRateCard(idx, "unit", e.target.value)}
+                        className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-[12px] text-white outline-none w-24"
+                      />
+                      <button onClick={() => removeRateCard(idx)} className="text-[11px] text-neutral-600 hover:text-red-400">×</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] text-neutral-600 uppercase tracking-[0.12em]">sla</span>
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                  <div className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2">
+                    <span className="text-[10px] text-neutral-600">uptime %</span>
+                    <input
+                      type="number" value={catUptimePercent}
+                      onChange={(e) => setCatUptimePercent(e.target.value)}
+                      className="w-full bg-transparent text-[13px] text-white outline-none num mt-1"
+                    />
+                  </div>
+                  <div className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2">
+                    <span className="text-[10px] text-neutral-600">avg ms</span>
+                    <input
+                      type="number" value={catAvgResponseMs}
+                      onChange={(e) => setCatAvgResponseMs(e.target.value)}
+                      className="w-full bg-transparent text-[13px] text-white outline-none num mt-1"
+                    />
+                  </div>
+                  <div className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2">
+                    <span className="text-[10px] text-neutral-600">max ms</span>
+                    <input
+                      type="number" value={catMaxResponseMs}
+                      onChange={(e) => setCatMaxResponseMs(e.target.value)}
+                      className="w-full bg-transparent text-[13px] text-white outline-none num mt-1"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {catError && <p className="text-[11px] text-red-400">{catError}</p>}
+              {catSuccess && <p className="text-[11px] text-[var(--accent)]">catalog entry saved successfully</p>}
+
+              <button
+                onClick={handleCatalogRegister}
+                disabled={catLoading || !catCapabilities.length}
+                className="w-full btn-primary text-[13px] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {catLoading ? "saving..." : catalogEntry ? "update catalog" : "register in catalog"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

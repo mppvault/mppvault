@@ -12,6 +12,9 @@ const sections = [
   { id: "payment-flow", label: "Payment Flow" },
   { id: "agent-identity", label: "Agent Identity" },
   { id: "agent-sdk", label: "Agent SDK" },
+  { id: "capability-catalog", label: "Capability Catalog" },
+  { id: "composable-commerce", label: "Composable Commerce" },
+  { id: "usage-tracking", label: "Usage Tracking" },
   { id: "create-vault", label: "Create a Vault" },
   { id: "sub-accounts", label: "Sub-Accounts" },
   { id: "spending-rules", label: "Spending Rules" },
@@ -375,6 +378,10 @@ console.log("Total transactions:", info.txCount);`}
                       ["vault.pay(subAccount, recipient, amount)", "Execute USDC payment to whitelisted recipient"],
                       ["vault.canPay(subAccount, amount)", "Pre-check if payment will succeed"],
                       ["vault.getSubAccount(address)", "Read sub-account balance, rules, and stats"],
+                      ["vault.discoverAgents(capability)", "Find agents offering a capability"],
+                      ["vault.getAgentCatalog(address)", "Get agent's catalog with rate cards"],
+                      ["vault.payForService(sub, agent, cap)", "Pay for a service at listed rate"],
+                      ["vault.reportUsage(record)", "Track usage for metered billing"],
                     ].map(([method, desc]) => (
                       <tr key={method} className="hover:bg-white/[0.02]">
                         <td className="px-4 py-2.5 font-mono text-[var(--accent)] text-[12px]">{method}</td>
@@ -392,6 +399,223 @@ console.log("Total transactions:", info.txCount);`}
                 <p className="text-[13px] text-neutral-400 leading-[1.8]">
                   Other protocols require you to understand their custom settlement layer, buy domain names, and set up webhooks. With MPP Vault: create SDK instance, call <code className="text-[12px] font-mono text-neutral-300 bg-white/[0.04] px-1.5 py-0.5 rounded">pay()</code>, done. The on-chain program handles everything else.
                 </p>
+              </div>
+            </section>
+
+            <hr className="my-14 border-white/[0.06]" />
+
+            {/* ── Capability Catalog ── */}
+            <section id="capability-catalog" className="scroll-mt-24">
+              <h2 className="text-[24px] font-bold tracking-tight">
+                Capability Catalog
+              </h2>
+              <p className="text-[14px] text-neutral-400 leading-[1.8] mt-4">
+                The Capability Catalog lets agents advertise what they can do, how much it costs, and where to reach them. Catalog data is stored off-chain via the <code className="text-[12px] font-mono text-neutral-300 bg-white/[0.04] px-1.5 py-0.5 rounded">/api/catalog</code> API — keeping it fast, free to update, and decoupled from the on-chain program.
+              </p>
+              <p className="text-[14px] text-neutral-400 leading-[1.8] mt-4">
+                Each catalog entry includes:
+              </p>
+              <ul className="text-[14px] text-neutral-400 leading-[1.8] mt-3 space-y-2 ml-1">
+                <li className="flex gap-3">
+                  <span className="text-[var(--accent)] shrink-0">▸</span>
+                  <span><span className="text-white font-medium">Capabilities</span> — what the agent can do (text-generation, code-generation, web-search, etc.)</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="text-[var(--accent)] shrink-0">▸</span>
+                  <span><span className="text-white font-medium">Rate Cards</span> — price per capability (e.g. $0.02 per call for text-generation)</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="text-[var(--accent)] shrink-0">▸</span>
+                  <span><span className="text-white font-medium">Endpoint URL</span> — where to reach the agent&apos;s API</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="text-[var(--accent)] shrink-0">▸</span>
+                  <span><span className="text-white font-medium">SLA</span> — uptime percentage, average response time, max response time</span>
+                </li>
+              </ul>
+
+              <Code title="Register capabilities via API">
+{`// POST /api/catalog
+const response = await fetch("https://mppvault.com/api/catalog", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    subAccountAddress: "YOUR_SUB_ACCOUNT_ADDRESS",
+    agentName: "Research Agent",
+    agentId: "research-agent-v1",
+    description: "AI agent specialized in web research and summarization",
+    endpoint: "https://api.your-agent.com/v1",
+    capabilities: ["web-search", "summarization", "text-generation"],
+    rateCards: [
+      { capability: "web-search", priceUsdc: 0.05, unit: "per-call" },
+      { capability: "summarization", priceUsdc: 0.02, unit: "per-call" },
+      { capability: "text-generation", priceUsdc: 0.01, unit: "per-1k-tokens" },
+    ],
+    sla: {
+      uptimePercent: 99.5,
+      avgResponseMs: 800,
+      maxResponseMs: 5000,
+    },
+  }),
+});`}
+              </Code>
+
+              <Code title="Query catalog by capability">
+{`// GET /api/catalog?capability=web-search
+const agents = await fetch(
+  "https://mppvault.com/api/catalog?capability=web-search"
+).then(r => r.json());
+
+agents.forEach(agent => {
+  console.log(agent.agentName, "—", agent.endpoint);
+  agent.rateCards.forEach(rc => {
+    console.log(\`  \${rc.capability}: $\${rc.priceUsdc}/\${rc.unit}\`);
+  });
+});`}
+              </Code>
+
+              <div className="mt-6 rounded-xl border border-[var(--accent)]/[0.12] bg-[var(--accent)]/[0.04] p-5">
+                <p className="text-[13px] text-[var(--accent)] font-medium mb-1">
+                  Why off-chain?
+                </p>
+                <p className="text-[13px] text-neutral-400 leading-[1.8]">
+                  Catalog metadata changes frequently — prices, endpoints, capabilities. Storing it on-chain would cost rent per byte and require a transaction for every update. The hybrid approach keeps payments trustless on-chain while catalog data is fast and free to update. This is the same pattern used by Metaplex (NFT metadata off-chain) and Jupiter (token lists off-chain).
+                </p>
+              </div>
+            </section>
+
+            <hr className="my-14 border-white/[0.06]" />
+
+            {/* ── Composable Commerce ── */}
+            <section id="composable-commerce" className="scroll-mt-24">
+              <h2 className="text-[24px] font-bold tracking-tight">
+                Composable Commerce
+              </h2>
+              <p className="text-[14px] text-neutral-400 leading-[1.8] mt-4">
+                Composable Agent Commerce enables agents to discover each other, negotiate prices, and pay for services programmatically. The SDK v0.2.0 adds three new methods that make agent-to-agent commerce a first-class primitive.
+              </p>
+
+              <Code title="Discover agents by capability">
+{`import { Connection, Keypair } from "@solana/web3.js";
+import { MppVaultSDK } from "mpp-vault-sdk";
+
+const sdk = new MppVaultSDK({
+  connection: new Connection("https://api.mainnet-beta.solana.com"),
+  agentKeypair: myKeypair,
+});
+
+// Find all agents that offer text-generation
+const agents = await sdk.discoverAgents("text-generation");
+console.log(\`Found \${agents.length} agents offering text-generation\`);
+
+agents.forEach(agent => {
+  const rate = agent.rateCards.find(r => r.capability === "text-generation");
+  console.log(\`  \${agent.agentName}: $\${rate?.priceUsdc}/\${rate?.unit}\`);
+  console.log(\`  Endpoint: \${agent.endpoint}\`);
+  console.log(\`  SLA: \${agent.sla.uptimePercent}% uptime\`);
+});`}
+              </Code>
+
+              <Code title="Get an agent's full catalog">
+{`// Get everything an agent offers
+const catalog = await sdk.getAgentCatalog("AGENT_SUB_ACCOUNT_ADDRESS");
+
+if (catalog) {
+  console.log("Agent:", catalog.agentName);
+  console.log("Capabilities:", catalog.capabilities.join(", "));
+  console.log("Rate cards:");
+  catalog.rateCards.forEach(rc => {
+    console.log(\`  \${rc.capability}: $\${rc.priceUsdc}/\${rc.unit}\`);
+  });
+}`}
+              </Code>
+
+              <Code title="Pay for a specific service">
+{`// Pay an agent for text-generation at their listed rate
+const result = await sdk.payForService(
+  "YOUR_SUB_ACCOUNT",       // payer
+  "AGENT_SUB_ACCOUNT",      // recipient agent
+  "text-generation",        // capability
+);
+
+console.log("Paid:", result.priceUsdc, "USDC");
+console.log("Capability:", result.capability);
+console.log("Tx:", result.signature);`}
+              </Code>
+
+              <div className="mt-6 rounded-xl border border-white/[0.06] bg-white/[0.03] overflow-hidden">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="border-b border-white/[0.06] text-left">
+                      <th className="px-4 py-3 font-medium text-neutral-400">Method</th>
+                      <th className="px-4 py-3 font-medium text-neutral-400">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.04]">
+                    {[
+                      ["sdk.discoverAgents(capability)", "Find agents offering a specific capability"],
+                      ["sdk.getAgentCatalog(address)", "Get an agent's full catalog entry"],
+                      ["sdk.payForService(sub, agent, cap)", "Pay for a service at the listed rate"],
+                    ].map(([method, desc]) => (
+                      <tr key={method} className="hover:bg-white/[0.02]">
+                        <td className="px-4 py-2.5 font-mono text-[var(--accent)] text-[12px]">{method}</td>
+                        <td className="px-4 py-2.5 text-neutral-400">{desc}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-6 rounded-xl border border-[var(--accent)]/[0.12] bg-[var(--accent)]/[0.04] p-5">
+                <p className="text-[13px] text-[var(--accent)] font-medium mb-1">
+                  Agent-to-agent economy
+                </p>
+                <p className="text-[13px] text-neutral-400 leading-[1.8]">
+                  This is the foundation for a composable agent economy. Agent A needs web search? It discovers Agent B through the catalog, checks the rate card, and pays on-chain — all in three function calls. No manual setup, no API key exchange, no billing portal.
+                </p>
+              </div>
+            </section>
+
+            <hr className="my-14 border-white/[0.06]" />
+
+            {/* ── Usage Tracking ── */}
+            <section id="usage-tracking" className="scroll-mt-24">
+              <h2 className="text-[24px] font-bold tracking-tight">
+                Usage Tracking
+              </h2>
+              <p className="text-[14px] text-neutral-400 leading-[1.8] mt-4">
+                Metered usage tracking gives you visibility into how your agents spend. The dashboard shows cost-per-invocation breakdowns computed from on-chain transaction data. The SDK provides a <code className="text-[12px] font-mono text-neutral-300 bg-white/[0.04] px-1.5 py-0.5 rounded">reportUsage()</code> method for tracking usage events programmatically.
+              </p>
+
+              <Code title="Report usage events">
+{`// Track usage manually (e.g. for free-tier or pre-paid)
+sdk.reportUsage({
+  signature: "5xKm...txSig",
+  subAccountAddress: "YOUR_SUB_ACCOUNT",
+  capability: "text-generation",
+  amountUsdc: 0.02,
+  recipient: "AGENT_SUB_ACCOUNT",
+});
+
+// payForService() automatically logs usage
+const result = await sdk.payForService(mySubAccount, agentAddr, "web-search");
+// ^ usage is recorded internally
+
+// Get the full usage log
+const log = sdk.getUsageLog();
+log.forEach(entry => {
+  console.log(\`\${entry.capability}: $\${entry.amountUsdc} → \${entry.recipient}\`);
+});`}
+              </Code>
+
+              <div className="mt-6 rounded-xl border border-white/[0.06] bg-white/[0.03] p-5">
+                <p className="text-[13px] text-white font-medium mb-2">Dashboard metrics include:</p>
+                <ul className="text-[13px] text-neutral-400 leading-[1.7] space-y-1">
+                  <li>Total cost across all services</li>
+                  <li>Number of invocations per service</li>
+                  <li>Average cost per invocation</li>
+                  <li>Per-service breakdown with recipient addresses</li>
+                </ul>
               </div>
             </section>
 
@@ -967,6 +1191,11 @@ await proposal.execute();`}
                       ["vault.createProposal()", "Initiate a multi-sig payment"],
                       ["proposal.approve()", "Submit a signer approval"],
                       ["proposal.execute()", "Finalize an approved proposal"],
+                      ["sdk.discoverAgents(capability)", "Find agents by capability"],
+                      ["sdk.getAgentCatalog(address)", "Get agent's catalog entry"],
+                      ["sdk.payForService(sub, agent, cap)", "Pay for a capability at listed rate"],
+                      ["sdk.reportUsage(record)", "Record a usage event"],
+                      ["sdk.getUsageLog()", "Get all recorded usage events"],
                     ].map(([method, desc]) => (
                       <tr key={method} className="hover:bg-white/[0.02]">
                         <td className="px-4 py-2.5 font-mono text-[var(--accent)]">

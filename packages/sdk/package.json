@@ -1,7 +1,7 @@
 {
   "name": "mpp-vault-sdk",
-  "version": "0.1.0",
-  "description": "TypeScript SDK for MPP Vault — agent-to-agent payments on Solana",
+  "version": "0.2.0",
+  "description": "TypeScript SDK for MPP Vault — agent-to-agent payments, capability discovery, and composable commerce on Solana",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
