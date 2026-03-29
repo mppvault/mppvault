@@ -85,13 +85,31 @@ async function sendAndConfirm(
   const ixs = Array.isArray(ix) ? ix : [ix];
   for (const i of ixs) tx.add(i);
   tx.feePayer = payer;
-  tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
   const signed = await signTransaction(tx);
-  const sig = await connection.sendRawTransaction(signed.serialize(), {
-    skipPreflight: true,
-    preflightCommitment: "confirmed",
-  });
-  await connection.confirmTransaction(sig, "confirmed");
+
+  let sig: string;
+  try {
+    sig = await connection.sendRawTransaction(signed.serialize(), {
+      preflightCommitment: "confirmed",
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("0x0")) throw new Error("Transaction failed: insufficient funds or account error");
+    if (msg.includes("0x1")) throw new Error("Transaction failed: insufficient funds for fee");
+    throw new Error(`Transaction failed to send: ${msg}`);
+  }
+
+  const confirmation = await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
+
+  if (confirmation.value.err) {
+    throw new Error(`Transaction confirmed but failed on-chain: ${JSON.stringify(confirmation.value.err)}`);
+  }
+
   return sig;
 }
 
@@ -214,13 +232,12 @@ export function useVault() {
       if (!publicKey || !signTransaction)
         throw new Error("Wallet not connected");
 
-      const conn = getConnection();
       const [vaultPDA] = findVaultPDA(publicKey);
-      const info = await conn.getAccountInfo(vaultPDA);
-      if (!info) throw new Error("Vault not found");
+      const info = await connection.getAccountInfo(vaultPDA);
+      if (!info) throw new Error("Vault not found on-chain. Deploy your vault first.");
 
       const vaultData = parseVaultAccount(info.data);
-      if (!vaultData) throw new Error("Failed to parse vault");
+      if (!vaultData) throw new Error("Failed to parse vault data");
 
       const [subPDA] = findSubAccountPDA(
         vaultPDA,
@@ -389,22 +406,20 @@ export function useVault() {
   const deposit = useCallback(
     async (amount: number, subAccountId: string) => {
       if (!publicKey || !signTransaction) throw new Error("Wallet not connected");
-      const conn = getConnection();
       const [vaultPDA] = findVaultPDA(publicKey);
       const subAccountPubkey = new PublicKey(subAccountId);
 
       const depositorTokenAccount = findAssociatedTokenAddress(publicKey, USDC_MINT);
       const vaultTokenAccount = findAssociatedTokenAddress(vaultPDA, USDC_MINT);
 
-      // create ATAs if they don't exist yet
       const ixs: TransactionInstruction[] = [];
 
-      const userAtaInfo = await conn.getAccountInfo(depositorTokenAccount);
+      const userAtaInfo = await connection.getAccountInfo(depositorTokenAccount);
       if (!userAtaInfo) {
         ixs.push(createAssociatedTokenAccountIx(publicKey, publicKey, USDC_MINT));
       }
 
-      const vaultAtaInfo = await conn.getAccountInfo(vaultTokenAccount);
+      const vaultAtaInfo = await connection.getAccountInfo(vaultTokenAccount);
       if (!vaultAtaInfo) {
         ixs.push(createAssociatedTokenAccountIx(publicKey, vaultPDA, USDC_MINT));
       }
@@ -413,7 +428,7 @@ export function useVault() {
       ixs.push(await depositInstruction(
         publicKey, vaultPDA, subAccountPubkey, depositorTokenAccount, vaultTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
       ));
-      const sig = await sendAndConfirm(conn, ixs, signTransaction, publicKey);
+      const sig = await sendAndConfirm(connection, ixs, signTransaction, publicKey);
       await refresh();
       return sig;
     },
