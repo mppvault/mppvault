@@ -287,7 +287,7 @@ export default function DocsPage() {
 
               <Code title="Resolve an agent identity">
 {`import { Connection, PublicKey } from "@solana/web3.js";
-import { MppVaultSDK } from "@mpp/vault-sdk";
+import { MppVaultSDK } from "mpp-vault-sdk";
 
 const sdk = new MppVaultSDK({
   connection: new Connection("https://api.mainnet-beta.solana.com"),
@@ -316,12 +316,12 @@ console.log("Status:", agent.status);`}
               </p>
 
               <Code title="Install">
-{`npm install @solana/web3.js`}
+{`npm install mpp-vault-sdk @solana/web3.js`}
               </Code>
 
               <Code title="Quick start — execute a payment">
 {`import { Connection, Keypair } from "@solana/web3.js";
-import { MppVaultSDK } from "./sdk"; // or @mpp/vault-sdk when published
+import { MppVaultSDK } from "mpp-vault-sdk";
 
 const connection = new Connection("https://api.mainnet-beta.solana.com");
 const agentKeypair = Keypair.fromSecretKey(/* your agent's keypair */);
@@ -986,15 +986,12 @@ await proposal.execute();`}
                   SDK available now
                 </p>
                 <p className="text-[13px] text-neutral-400 leading-[1.7]">
-                  The Agent SDK is available in the repository at <code className="text-[12px] font-mono text-neutral-300 bg-white/[0.04] px-1.5 py-0.5 rounded">src/lib/sdk.ts</code>. See the <a href="#agent-sdk" className="text-[var(--accent)] hover:underline">Agent SDK section</a> for usage examples. npm package coming soon.
+                  The Agent SDK is available as <code className="text-[12px] font-mono text-neutral-300 bg-white/[0.04] px-1.5 py-0.5 rounded">mpp-vault-sdk</code> on npm. See the <a href="#agent-sdk" className="text-[var(--accent)] hover:underline">Agent SDK section</a> for usage examples.
                 </p>
               </div>
 
               <Code title="Install">
-{`npm install @solana/web3.js
-
-# Copy sdk.ts from the repository into your project
-# npm package (@mpp/vault-sdk) coming soon`}
+{`npm install mpp-vault-sdk @solana/web3.js`}
               </Code>
             </section>
 
