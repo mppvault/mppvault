@@ -96,10 +96,14 @@ async function sendAndConfirm(
       preflightCommitment: "confirmed",
     });
   } catch (err: unknown) {
+    if (err && typeof err === "object" && "getLogs" in err) {
+      try {
+        const logs = await (err as { getLogs: (c: Connection) => Promise<string[]> }).getLogs(connection);
+        console.error("Transaction logs:", logs);
+      } catch { /* getLogs failed */ }
+    }
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("0x0")) throw new Error("Transaction failed: insufficient funds or account error");
-    if (msg.includes("0x1")) throw new Error("Transaction failed: insufficient funds for fee");
-    throw new Error(`Transaction failed to send: ${msg}`);
+    throw new Error(`Transaction failed: ${msg}`);
   }
 
   const confirmation = await connection.confirmTransaction(
@@ -433,6 +437,40 @@ export function useVault() {
       ixs.push(await depositInstruction(
         publicKey, vaultPDA, subAccountPubkey, depositorTokenAccount, vaultTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
       ));
+
+      console.log("=== DEPOSIT DEBUG ===");
+      console.log("PROGRAM_ID:", PROGRAM_ID.toBase58());
+      console.log("TOKEN_PROGRAM_ID:", TOKEN_PROGRAM_ID.toBase58());
+      console.log("ASSOC_TOKEN_PROGRAM:", ASSOCIATED_TOKEN_PROGRAM_ID.toBase58());
+      console.log("authority:", publicKey.toBase58());
+      console.log("vault PDA:", vaultPDA.toBase58());
+      console.log("subAccount:", subAccountPubkey.toBase58());
+      console.log("depositorTokenAccount:", depositorTokenAccount.toBase58());
+      console.log("vaultTokenAccount:", vaultTokenAccount.toBase58());
+      console.log("USDC_MINT:", USDC_MINT.toBase58());
+      console.log("vault ATA exists:", !!vaultAtaInfo);
+      console.log("num instructions:", ixs.length);
+      for (let i = 0; i < ixs.length; i++) {
+        console.log(`ix[${i}] programId:`, ixs[i].programId.toBase58());
+        console.log(`ix[${i}] keys:`, ixs[i].keys.map(k => k.pubkey.toBase58()));
+      }
+
+      // Simulate first to get detailed logs
+      const simTx = new Transaction();
+      for (const i of ixs) simTx.add(i);
+      simTx.feePayer = publicKey;
+      simTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+      try {
+        const sim = await connection.simulateTransaction(simTx);
+        console.log("Simulation result:", JSON.stringify(sim.value, null, 2));
+        if (sim.value.err) {
+          throw new Error(`Simulation failed: ${JSON.stringify(sim.value.err)}. Logs: ${(sim.value.logs ?? []).join(" | ")}`);
+        }
+      } catch (simErr: unknown) {
+        if (simErr instanceof Error && simErr.message.startsWith("Simulation failed:")) throw simErr;
+        console.error("Simulation error:", simErr);
+        throw new Error(`Deposit simulation error: ${simErr instanceof Error ? simErr.message : String(simErr)}`);
+      }
 
       const sig = await sendAndConfirm(connection, ixs, signTransaction, publicKey);
       await refresh();
