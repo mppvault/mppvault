@@ -48,6 +48,20 @@ const features = [
     detail: "For high-value operations above a threshold you define, multiple signatures are required. When a multi-sig payment is initiated, a proposal account is created on-chain. Each required signer submits an approval. Once the threshold is met, anyone can finalize the transaction. Proposals expire after a configurable TTL. Signers are defined on-chain and can be updated by the vault authority.",
     highlights: ["Configurable threshold (2-of-3, 3-of-5)", "On-chain proposal flow", "Expiring proposals with TTL", "Signer management"],
   },
+  {
+    label: "agent identity",
+    title: "on-chain, not a domain name.",
+    short: "every agent gets a verifiable on-chain identity with real spending history.",
+    detail: "Each sub-account is a unique PDA on Solana — that's your agent's identity. It includes a name, agent ID, spending history, transaction count, and trust score. All verifiable on-chain. Other protocols sell you a domain name and call it identity. We give you an on-chain track record you can't fake.",
+    highlights: ["Unique PDA per agent", "Verified spending history", "Trust score from on-chain data", "Visible in the Agent Registry"],
+  },
+  {
+    label: "agent sdk",
+    title: "three lines to pay.",
+    short: "TypeScript SDK for agent-to-agent payments. import, configure, pay.",
+    detail: "The MPP Vault SDK lets any AI agent execute payments in a single function call. No Anchor dependency, no IDL files, no custom settlement layer. Just import the SDK, create an instance with your keypair, and call pay(). The on-chain program handles all rule checking, token transfers, and accounting.",
+    highlights: ["Single function call", "No Anchor dependency", "Pre-flight checks built in", "Read sub-account state"],
+  },
 ];
 
 const steps = [

@@ -10,6 +10,8 @@ const sections = [
   { id: "getting-started", label: "Getting Started" },
   { id: "architecture", label: "Architecture" },
   { id: "payment-flow", label: "Payment Flow" },
+  { id: "agent-identity", label: "Agent Identity" },
+  { id: "agent-sdk", label: "Agent SDK" },
   { id: "create-vault", label: "Create a Vault" },
   { id: "sub-accounts", label: "Sub-Accounts" },
   { id: "spending-rules", label: "Spending Rules" },
@@ -238,6 +240,157 @@ export default function DocsPage() {
                 </p>
                 <p className="text-[13px] text-neutral-400 leading-[1.7]">
                   USDC (SPL token) on Solana is the primary currency. Can be extended to other SPL tokens. Works with any MPP-compatible service — API endpoints, MCP servers, or any HTTP-addressable service that accepts MPP payments.
+                </p>
+              </div>
+            </section>
+
+            <hr className="my-14 border-white/[0.06]" />
+
+            {/* ── Agent Identity ── */}
+            <section id="agent-identity" className="scroll-mt-24">
+              <h2 className="text-[24px] font-bold tracking-tight">
+                Agent Identity
+              </h2>
+              <p className="text-[14px] text-neutral-400 leading-[1.8] mt-4">
+                Every agent on MPP Vault has a native on-chain identity. When you create a sub-account, the agent gets a unique program-derived address (PDA) on Solana — this is its identity. No domain names, no registries. Just a verifiable on-chain account.
+              </p>
+              <p className="text-[14px] text-neutral-400 leading-[1.8] mt-4">
+                Each agent identity includes:
+              </p>
+              <ul className="text-[14px] text-neutral-400 leading-[1.8] mt-3 space-y-2 ml-1">
+                <li className="flex gap-3">
+                  <span className="text-[var(--accent)] shrink-0">▸</span>
+                  <span><span className="text-white font-medium">Unique PDA</span> — deterministic address derived from vault + index, verifiable by anyone</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="text-[var(--accent)] shrink-0">▸</span>
+                  <span><span className="text-white font-medium">Name &amp; Agent ID</span> — human-readable identifier stored on-chain (max 32 / 64 bytes)</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="text-[var(--accent)] shrink-0">▸</span>
+                  <span><span className="text-white font-medium">Verified spending history</span> — total spent, transaction count, daily spend — all on-chain</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="text-[var(--accent)] shrink-0">▸</span>
+                  <span><span className="text-white font-medium">Trust score</span> — computed from on-chain activity in the <a href="/registry" className="text-[var(--accent)] hover:underline">Agent Registry</a></span>
+                </li>
+              </ul>
+
+              <div className="mt-6 rounded-xl border border-[var(--accent)]/[0.12] bg-[var(--accent)]/[0.04] p-5">
+                <p className="text-[13px] text-[var(--accent)] font-medium mb-1">
+                  Why this matters
+                </p>
+                <p className="text-[13px] text-neutral-400 leading-[1.8]">
+                  Other protocols sell you a domain name and call it &ldquo;agent identity.&rdquo; That&apos;s a registry entry, not identity. On MPP Vault, your agent&apos;s identity is its on-chain spending history. You can&apos;t fake 50 transactions or $10,000 in verified volume.
+                </p>
+              </div>
+
+              <Code title="Resolve an agent identity">
+{`import { Connection, PublicKey } from "@solana/web3.js";
+import { MppVaultSDK } from "@mpp/vault-sdk";
+
+const sdk = new MppVaultSDK({
+  connection: new Connection("https://api.mainnet-beta.solana.com"),
+  programId: "2WBK34gnJjYRN4J8fB97CTwRqPJYpx8XsdhDSb1fpPBx",
+  agentKeypair: myKeypair,
+});
+
+const agent = await sdk.getSubAccount("8DDsUJ7hP6swV6DqnnqSYhyzRTwcXfWnmc5fapyavxhj");
+console.log("Name:", agent.name);
+console.log("Agent ID:", agent.agentId);
+console.log("Total spent:", agent.spent, "USDC");
+console.log("Transactions:", agent.txCount);
+console.log("Status:", agent.status);`}
+              </Code>
+            </section>
+
+            <hr className="my-14 border-white/[0.06]" />
+
+            {/* ── Agent SDK ── */}
+            <section id="agent-sdk" className="scroll-mt-24">
+              <h2 className="text-[24px] font-bold tracking-tight">
+                Agent SDK
+              </h2>
+              <p className="text-[14px] text-neutral-400 leading-[1.8] mt-4">
+                The MPP Vault SDK lets any AI agent execute payments in a single function call. No Anchor dependency, no IDL files. Just import, configure, and pay.
+              </p>
+
+              <Code title="Install">
+{`npm install @solana/web3.js`}
+              </Code>
+
+              <Code title="Quick start — execute a payment">
+{`import { Connection, Keypair } from "@solana/web3.js";
+import { MppVaultSDK } from "./sdk"; // or @mpp/vault-sdk when published
+
+const connection = new Connection("https://api.mainnet-beta.solana.com");
+const agentKeypair = Keypair.fromSecretKey(/* your agent's keypair */);
+
+const vault = new MppVaultSDK({
+  connection,
+  programId: "2WBK34gnJjYRN4J8fB97CTwRqPJYpx8XsdhDSb1fpPBx",
+  agentKeypair,
+});
+
+// Check if payment is possible before sending
+const check = await vault.canPay("YOUR_SUB_ACCOUNT_ADDRESS", 5.00);
+if (!check.allowed) {
+  console.error("Cannot pay:", check.reason);
+  process.exit(1);
+}
+
+// Execute payment — 5 USDC to a whitelisted recipient
+const result = await vault.pay(
+  "YOUR_SUB_ACCOUNT_ADDRESS",     // your agent's sub-account
+  "RECIPIENT_WALLET_ADDRESS",      // must be whitelisted
+  5.00,                            // amount in USDC
+);
+
+console.log("Payment sent:", result.signature);
+console.log("Amount:", result.amount, "USDC");
+console.log("To:", result.recipient);`}
+              </Code>
+
+              <Code title="Read sub-account state">
+{`const info = await vault.getSubAccount("YOUR_SUB_ACCOUNT_ADDRESS");
+
+console.log("Balance:", info.balance, "USDC");
+console.log("Spent today:", info.spentToday, "USDC");
+console.log("Max per tx:", info.maxPerTx, "USDC");
+console.log("Max per day:", info.maxPerDay, "USDC");
+console.log("Status:", info.status);
+console.log("Total transactions:", info.txCount);`}
+              </Code>
+
+              <div className="mt-6 rounded-xl border border-white/[0.06] bg-white/[0.03] overflow-hidden">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="border-b border-white/[0.06] text-left">
+                      <th className="px-4 py-3 font-medium text-neutral-400">Method</th>
+                      <th className="px-4 py-3 font-medium text-neutral-400">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.04]">
+                    {[
+                      ["vault.pay(subAccount, recipient, amount)", "Execute USDC payment to whitelisted recipient"],
+                      ["vault.canPay(subAccount, amount)", "Pre-check if payment will succeed"],
+                      ["vault.getSubAccount(address)", "Read sub-account balance, rules, and stats"],
+                    ].map(([method, desc]) => (
+                      <tr key={method} className="hover:bg-white/[0.02]">
+                        <td className="px-4 py-2.5 font-mono text-[var(--accent)] text-[12px]">{method}</td>
+                        <td className="px-4 py-2.5 text-neutral-400">{desc}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-6 rounded-xl border border-[var(--accent)]/[0.12] bg-[var(--accent)]/[0.04] p-5">
+                <p className="text-[13px] text-[var(--accent)] font-medium mb-1">
+                  Three lines to pay
+                </p>
+                <p className="text-[13px] text-neutral-400 leading-[1.8]">
+                  Other protocols require you to understand their custom settlement layer, buy domain names, and set up webhooks. With MPP Vault: create SDK instance, call <code className="text-[12px] font-mono text-neutral-300 bg-white/[0.04] px-1.5 py-0.5 rounded">pay()</code>, done. The on-chain program handles everything else.
                 </p>
               </div>
             </section>
@@ -830,21 +983,18 @@ await proposal.execute();`}
 
               <div className="mt-8 rounded-xl border border-[var(--accent)]/[0.12] bg-[var(--accent)]/[0.04] p-5">
                 <p className="text-[13px] text-[var(--accent)] font-medium mb-1">
-                  SDK coming soon
+                  SDK available now
                 </p>
                 <p className="text-[13px] text-neutral-400 leading-[1.7]">
-                  The TypeScript SDK is currently in private beta. The
-                  examples on this page reflect the target API surface.
-                  Join the waitlist or reach out on Twitter for early
-                  access.
+                  The Agent SDK is available in the repository at <code className="text-[12px] font-mono text-neutral-300 bg-white/[0.04] px-1.5 py-0.5 rounded">src/lib/sdk.ts</code>. See the <a href="#agent-sdk" className="text-[var(--accent)] hover:underline">Agent SDK section</a> for usage examples. npm package coming soon.
                 </p>
               </div>
 
-              <Code title="Install (coming soon)">
-{`npm install @mpp/vault-sdk @solana/web3.js
+              <Code title="Install">
+{`npm install @solana/web3.js
 
-# or
-yarn add @mpp/vault-sdk @solana/web3.js`}
+# Copy sdk.ts from the repository into your project
+# npm package (@mpp/vault-sdk) coming soon`}
               </Code>
             </section>
 
