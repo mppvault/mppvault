@@ -419,56 +419,41 @@ export function useVault() {
 
       const vaultTokenAccount = findAssociatedTokenAddress(vaultPDA, USDC_MINT);
 
+      const amountLamports = BigInt(Math.round(amount * 10 ** 6));
       const ixs: TransactionInstruction[] = [];
 
-      // Find user's actual USDC token account
-      let depositorTokenAccount: PublicKey;
       const userAccounts = await connection.getTokenAccountsByOwner(publicKey, { mint: USDC_MINT });
-      if (userAccounts.value.length > 0) {
-        depositorTokenAccount = userAccounts.value[0].pubkey;
-      } else {
+      if (userAccounts.value.length === 0) {
         throw new Error("No USDC found in your wallet. Buy or receive USDC first.");
       }
+      const parseBalance = (data: Buffer | Uint8Array) =>
+        BigInt("0x" + Buffer.from(data.slice(64, 72)).reverse().toString("hex"));
+      const sorted = [...userAccounts.value].sort((a, b) =>
+        Number(parseBalance(b.account.data) - parseBalance(a.account.data)),
+      );
+      const depositorTokenAccount = sorted[0].pubkey;
+      const depositorBalance = parseBalance(sorted[0].account.data);
 
-      // Create vault ATA if needed
+      console.log("=== DEPOSIT DEBUG ===");
+      console.log("amount input (UI):", amount, "amountLamports:", amountLamports.toString());
+      for (let i = 0; i < sorted.length; i++) {
+        const bal = parseBalance(sorted[i].account.data);
+        console.log(`USDC[${i}] ${sorted[i].pubkey.toBase58()} = ${Number(bal) / 1e6} USDC`);
+      }
+      console.log("Using:", depositorTokenAccount.toBase58(), "balance:", Number(depositorBalance) / 1e6, "USDC");
+
+      if (depositorBalance < amountLamports) {
+        throw new Error(`Insufficient USDC: have ${Number(depositorBalance) / 1e6}, need ${Number(amountLamports) / 1e6}`);
+      }
+
       const vaultAtaInfo = await connection.getAccountInfo(vaultTokenAccount);
       if (!vaultAtaInfo) {
         ixs.push(createAssociatedTokenAccountIdempotentIx(publicKey, vaultPDA, USDC_MINT));
       }
 
-      const amountLamports = BigInt(Math.round(amount * 10 ** 6));
       ixs.push(await depositInstruction(
         publicKey, vaultPDA, subAccountPubkey, depositorTokenAccount, vaultTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
       ));
-
-      console.log("=== DEPOSIT DEBUG ===");
-      console.log("amount input (UI):", amount);
-      console.log("amountLamports (raw):", amountLamports.toString());
-
-      console.log("=== USDC ACCOUNTS ===");
-      const allUsdcAccounts = await connection.getTokenAccountsByOwner(publicKey, { mint: USDC_MINT });
-      for (let i = 0; i < allUsdcAccounts.value.length; i++) {
-        const acc = allUsdcAccounts.value[i];
-        const rawAmount = BigInt("0x" + Buffer.from(acc.account.data.slice(64, 72)).reverse().toString("hex"));
-        console.log(`[${i}] pubkey: ${acc.pubkey.toBase58()}`);
-        console.log(`[${i}] amount: ${rawAmount.toString()} (${Number(rawAmount) / 1e6} USDC)`);
-      }
-      console.log("depositorTokenAccount in use:", depositorTokenAccount.toBase58());
-
-      console.log("PROGRAM_ID:", PROGRAM_ID.toBase58());
-      console.log("TOKEN_PROGRAM_ID:", TOKEN_PROGRAM_ID.toBase58());
-      console.log("ASSOC_TOKEN_PROGRAM:", ASSOCIATED_TOKEN_PROGRAM_ID.toBase58());
-      console.log("authority:", publicKey.toBase58());
-      console.log("vault PDA:", vaultPDA.toBase58());
-      console.log("subAccount:", subAccountPubkey.toBase58());
-      console.log("vaultTokenAccount:", vaultTokenAccount.toBase58());
-      console.log("USDC_MINT:", USDC_MINT.toBase58());
-      console.log("vault ATA exists:", !!vaultAtaInfo);
-      console.log("num instructions:", ixs.length);
-      for (let i = 0; i < ixs.length; i++) {
-        console.log(`ix[${i}] programId:`, ixs[i].programId.toBase58());
-        console.log(`ix[${i}] keys:`, ixs[i].keys.map(k => k.pubkey.toBase58()));
-      }
 
       // Simulate first to get detailed logs
       const simTx = new Transaction();
