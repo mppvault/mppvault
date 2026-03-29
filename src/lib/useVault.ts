@@ -60,6 +60,7 @@ import {
   fetchVault,
   fetchSubAccounts,
   fetchTransactions,
+  fetchWhitelist,
 } from "./accounts";
 import type {
   SubAccount,
@@ -140,6 +141,7 @@ export function useVault() {
   const [subAccounts, setSubAccounts] = useState<SubAccount[]>([]);
   const [transactions, setTransactions] = useState<TxType[]>([]);
   const [whitelist, setWhitelist] = useState<WhitelistEntry[]>([]);
+  const [whitelistMap, setWhitelistMap] = useState<Record<string, WhitelistEntry[]>>({});
   const [loading, setLoading] = useState(false);
   const [isOnChain, setIsOnChain] = useState(false);
 
@@ -187,9 +189,29 @@ export function useVault() {
           multiSigLimit: 0,
         });
 
-        setSubAccounts(subs);
+        // Fetch whitelist for each sub-account
+        const wMap: Record<string, WhitelistEntry[]> = {};
+        await Promise.all(
+          subs.map(async (sub) => {
+            try {
+              const entries = await fetchWhitelist(new PublicKey(sub.id));
+              wMap[sub.id] = entries;
+            } catch {
+              wMap[sub.id] = [];
+            }
+          })
+        );
+
+        // Patch whitelistCount into sub-accounts
+        const subsWithCount = subs.map((s) => ({
+          ...s,
+          whitelistCount: wMap[s.id]?.length ?? 0,
+        }));
+
+        setSubAccounts(subsWithCount);
         setTransactions(txs.length > 0 ? txs : []);
         setWhitelist([]);
+        setWhitelistMap(wMap);
         setIsOnChain(true);
       } else {
         setVault({
@@ -202,6 +224,7 @@ export function useVault() {
         setSubAccounts([]);
         setTransactions([]);
         setWhitelist([]);
+        setWhitelistMap({});
         setIsOnChain(false);
       }
     } catch {
@@ -477,6 +500,7 @@ export function useVault() {
     subAccounts,
     transactions,
     whitelist,
+    whitelistMap,
     loading,
     isOnChain,
     connected,

@@ -15,6 +15,7 @@ export default function AccountDetailPage({
     subAccounts,
     transactions,
     isOnChain,
+    whitelistMap,
     pauseSubAccount,
     resumeSubAccount,
     setSpendingRules,
@@ -407,11 +408,32 @@ export default function AccountDetailPage({
             </div>
           )}
 
-          {account.whitelistCount === 0 ? (
-            <p className="text-[13px] text-neutral-600">no whitelisted addresses yet.</p>
-          ) : (
-            <p className="text-[13px] text-neutral-500">{account.whitelistCount} approved {account.whitelistCount === 1 ? "address" : "addresses"}</p>
-          )}
+          {(() => {
+            const entries = whitelistMap[account.id] ?? [];
+            if (entries.length === 0) {
+              return <p className="text-[13px] text-neutral-600">no whitelisted addresses yet.</p>;
+            }
+            return (
+              <div className="space-y-2">
+                {entries.map((entry) => (
+                  <div key={entry.address} className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/[0.04] px-4 py-3">
+                    <div>
+                      <p className="text-[13px] text-white">{entry.label}</p>
+                      <p className="text-[11px] text-neutral-600 font-mono mt-0.5 truncate max-w-[200px]">{entry.address}</p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        try { await removeFromWhitelist(account.id, entry.address); } catch { /* ignored */ }
+                      }}
+                      className="text-[11px] text-neutral-600 hover:text-red-400 transition-colors shrink-0 ml-3"
+                    >
+                      remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       </div>
 

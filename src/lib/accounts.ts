@@ -234,9 +234,54 @@ export async function fetchTransactions(
 }
 
 export async function fetchWhitelist(
-  _subAccountAddress: PublicKey,
+  subAccountAddress: PublicKey,
 ): Promise<WhitelistEntry[]> {
-  // Whitelist entries are PDAs; to list them all we'd need getProgramAccounts
-  // with a filter. For now, return empty — will be populated when program is live.
-  return [];
+  const connection = getConnection();
+  const { PROGRAM_ID } = await import("./program");
+
+  try {
+    // Compute Anchor account discriminator: sha256("account:WhitelistEntry")[..8]
+    const preimage = new TextEncoder().encode("account:WhitelistEntry");
+    const hashBuffer = await crypto.subtle.digest("SHA-256", new Uint8Array(preimage));
+    const discriminator = Array.from(new Uint8Array(hashBuffer).slice(0, 8));
+
+    // Encode discriminator bytes as base58 for the memcmp filter
+    const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    function toBase58(bytes: number[]): string {
+      let num = BigInt("0x" + bytes.map(b => b.toString(16).padStart(2, "0")).join(""));
+      let result = "";
+      const base = BigInt(58);
+      while (num > 0n) {
+        result = BASE58_ALPHABET[Number(num % base)] + result;
+        num = num / base;
+      }
+      for (const b of bytes) {
+        if (b === 0) result = "1" + result;
+        else break;
+      }
+      return result;
+    }
+
+    const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
+      filters: [
+        { memcmp: { offset: 0, bytes: toBase58(discriminator) } },
+        { memcmp: { offset: 8, bytes: subAccountAddress.toBase58() } },
+      ],
+    });
+
+    return accounts.map((acc) => {
+      const d = acc.account.data;
+      // layout: discriminator(8) + sub_account(32) + recipient(32) + label_len(4) + label + is_active(1)
+      const recipient = new PublicKey(d.slice(40, 72)).toBase58();
+      const labelLen = d.readUInt32LE(72);
+      const label = d.slice(76, 76 + labelLen).toString("utf8");
+      return {
+        address: recipient,
+        label,
+        addedAt: "",
+      };
+    });
+  } catch {
+    return [];
+  }
 }
