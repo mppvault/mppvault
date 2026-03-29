@@ -93,6 +93,7 @@ export async function fetchSubAccounts(
         balance: lamportsToUsdc(sub.balance),
         totalBudget: lamportsToUsdc(sub.totalBudget),
         spent: lamportsToUsdc(sub.spent),
+        spentToday: lamportsToUsdc(sub.spentToday),
         maxPerTx: lamportsToUsdc(sub.maxPerTx),
         maxPerHour: 0,
         maxPerDay: lamportsToUsdc(sub.maxPerDay),
@@ -124,9 +125,12 @@ export async function fetchSubAccounts(
 
 export async function fetchTransactions(
   vaultAddress: PublicKey,
+  subAccounts: SubAccount[],
 ): Promise<Transaction[]> {
   const connection = getConnection();
   const txs: Transaction[] = [];
+  const { PROGRAM_ID } = await import("./program");
+  const programId = PROGRAM_ID.toBase58();
 
   try {
     const signatures = await connection.getSignaturesForAddress(
@@ -134,24 +138,93 @@ export async function fetchTransactions(
       { limit: 50 },
     );
 
-    for (const sig of signatures) {
-      txs.push({
-        id: sig.signature.slice(0, 8),
-        subAccountId: "",
-        subAccountName: "–",
-        to: "",
-        toLabel: "on-chain tx",
-        amount: 0,
-        timestamp: sig.blockTime
-          ? new Date(sig.blockTime * 1000).toLocaleString()
-          : "–",
-        status:
-          sig.confirmationStatus === "finalized" ||
-          sig.confirmationStatus === "confirmed"
-            ? "confirmed"
-            : "pending",
-        signature: sig.signature,
-      });
+    const batchSize = 10;
+    for (let i = 0; i < signatures.length; i += batchSize) {
+      const batch = signatures.slice(i, i + batchSize);
+      const parsedBatch = await Promise.allSettled(
+        batch.map(sig => connection.getParsedTransaction(sig.signature, { maxSupportedTransactionVersion: 0 }))
+      );
+
+      for (let j = 0; j < batch.length; j++) {
+        const sig = batch[j];
+        const result = parsedBatch[j];
+        const parsed = result.status === "fulfilled" ? result.value : null;
+
+        let amount = 0;
+        let toLabel = "on-chain tx";
+        let to = "";
+        let subAccountId = "";
+        let subAccountName = "–";
+
+        if (parsed?.transaction) {
+          const ixs = parsed.transaction.message.instructions;
+          for (const ix of ixs) {
+            if ("programId" in ix && ix.programId.toBase58() === programId && "accounts" in ix && ix.accounts) {
+              const accs = ix.accounts as PublicKey[];
+              if (accs.length >= 6) {
+                const subAccAddr = accs[2].toBase58();
+                const matched = subAccounts.find(s => s.id === subAccAddr);
+                if (matched) {
+                  subAccountId = matched.id;
+                  subAccountName = matched.name;
+                }
+              }
+            }
+          }
+
+          const pre = parsed.meta?.preTokenBalances ?? [];
+          const post = parsed.meta?.postTokenBalances ?? [];
+          const vaultAddr = vaultAddress.toBase58();
+          for (const postBal of post) {
+            if (postBal.owner === vaultAddr) {
+              const preBal = pre.find(p => p.accountIndex === postBal.accountIndex);
+              const preAmt = preBal?.uiTokenAmount?.uiAmount ?? 0;
+              const postAmt = postBal.uiTokenAmount?.uiAmount ?? 0;
+              const diff = (postAmt ?? 0) - (preAmt ?? 0);
+              if (diff !== 0) {
+                amount = Math.abs(diff);
+                toLabel = diff > 0 ? "deposit" : "withdrawal";
+                break;
+              }
+            }
+          }
+
+          if (amount === 0 && toLabel === "on-chain tx") {
+            for (const postBal of post) {
+              if (postBal.owner !== vaultAddr) {
+                const preBal = pre.find(p => p.accountIndex === postBal.accountIndex);
+                const preAmt = preBal?.uiTokenAmount?.uiAmount ?? 0;
+                const postAmt = postBal.uiTokenAmount?.uiAmount ?? 0;
+                const diff = (postAmt ?? 0) - (preAmt ?? 0);
+                if (diff > 0) {
+                  amount = diff;
+                  to = postBal.owner ?? "";
+                  toLabel = "payment";
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        txs.push({
+          id: sig.signature.slice(0, 8),
+          subAccountId,
+          subAccountName,
+          to,
+          toLabel,
+          amount,
+          timestamp: sig.blockTime
+            ? new Date(sig.blockTime * 1000).toLocaleString()
+            : "–",
+          status:
+            sig.confirmationStatus === "finalized" ||
+            sig.confirmationStatus === "confirmed"
+              ? "confirmed"
+              : "pending",
+          signature: sig.signature,
+        });
+      }
     }
   } catch {
     // RPC error or no transactions

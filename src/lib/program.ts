@@ -221,8 +221,8 @@ export async function depositInstruction(
   authority: PublicKey,
   vault: PublicKey,
   subAccount: PublicKey,
+  fromTokenAccount: PublicKey,
   vaultTokenAccount: PublicKey,
-  depositorTokenAccount: PublicKey,
   tokenProgram: PublicKey,
   amount: bigint,
 ): Promise<TransactionInstruction> {
@@ -232,7 +232,7 @@ export async function depositInstruction(
       { pubkey: authority, isSigner: true, isWritable: true },
       { pubkey: vault, isSigner: false, isWritable: true },
       { pubkey: subAccount, isSigner: false, isWritable: true },
-      { pubkey: depositorTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: fromTokenAccount, isSigner: false, isWritable: true },
       { pubkey: vaultTokenAccount, isSigner: false, isWritable: true },
       { pubkey: tokenProgram, isSigner: false, isWritable: false },
     ],
@@ -246,6 +246,7 @@ export async function depositInstruction(
 export async function withdrawInstruction(
   authority: PublicKey,
   vault: PublicKey,
+  subAccount: PublicKey,
   vaultTokenAccount: PublicKey,
   recipientTokenAccount: PublicKey,
   tokenProgram: PublicKey,
@@ -256,6 +257,7 @@ export async function withdrawInstruction(
     keys: [
       { pubkey: authority, isSigner: true, isWritable: false },
       { pubkey: vault, isSigner: false, isWritable: true },
+      { pubkey: subAccount, isSigner: false, isWritable: true },
       { pubkey: vaultTokenAccount, isSigner: false, isWritable: true },
       { pubkey: recipientTokenAccount, isSigner: false, isWritable: true },
       { pubkey: tokenProgram, isSigner: false, isWritable: false },

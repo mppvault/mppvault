@@ -133,28 +133,18 @@ export function useVault() {
 
       if (v) {
         const subs = await fetchSubAccounts(publicKey);
-        const txs = await fetchTransactions(v.publicKey);
+        const txs = await fetchTransactions(v.publicKey, subs);
 
-        // fetch vault's actual USDC token balance from ATA
         let vaultUsdcBalance = 0;
         try {
           const conn = getConnection();
-          // try both the vault PDA ATA and all token accounts owned by vault
           const vaultATA = findAssociatedTokenAddress(v.publicKey, USDC_MINT);
-          try {
-            const bal = await conn.getTokenAccountBalance(vaultATA);
-            vaultUsdcBalance = Number(bal.value.uiAmount ?? 0);
-          } catch {
-            // ATA might not exist, try getTokenAccountsByOwner
-            const accounts = await conn.getTokenAccountsByOwner(v.publicKey, { mint: USDC_MINT });
-            for (const acc of accounts.value) {
-              const bal = await conn.getTokenAccountBalance(acc.pubkey);
-              vaultUsdcBalance += Number(bal.value.uiAmount ?? 0);
-            }
-          }
+          const bal = await conn.getTokenAccountBalance(vaultATA);
+          vaultUsdcBalance = Number(bal.value.uiAmount ?? 0);
         } catch { /* no USDC in vault yet */ }
 
-        const totalBalance = vaultUsdcBalance > 0 ? vaultUsdcBalance : subs.reduce((s, a) => s + a.balance, 0);
+        const subAccountBalanceSum = subs.reduce((s, a) => s + a.balance, 0);
+        const totalBalance = vaultUsdcBalance > 0 ? vaultUsdcBalance : subAccountBalanceSum;
         const activeAgents = subs.filter(
           (a) => a.status === "active",
         ).length;
@@ -164,7 +154,7 @@ export function useVault() {
           totalBalance,
           totalAgents: subs.length,
           activeAgents,
-          totalSpentToday: 0,
+          totalSpentToday: subs.reduce((s, a) => s + a.spentToday, 0),
           totalSpentAllTime: subs.reduce((s, a) => s + a.spent, 0),
           multiSigThreshold: 1,
           multiSigSigners: 1,
@@ -419,7 +409,7 @@ export function useVault() {
 
       const amountLamports = BigInt(Math.round(amount * 10 ** 6));
       ixs.push(await depositInstruction(
-        publicKey, vaultPDA, subAccountPubkey, vaultTokenAccount, depositorTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
+        publicKey, vaultPDA, subAccountPubkey, depositorTokenAccount, vaultTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
       ));
       const sig = await sendAndConfirm(conn, ixs, signTransaction, publicKey);
       await refresh();
@@ -429,14 +419,15 @@ export function useVault() {
   );
 
   const withdraw = useCallback(
-    async (amount: number) => {
+    async (amount: number, subAccountId: string) => {
       if (!publicKey || !signTransaction) throw new Error("Wallet not connected");
       const [vaultPDA] = findVaultPDA(publicKey);
+      const subAccountPubkey = new PublicKey(subAccountId);
       const vaultTokenAccount = findAssociatedTokenAddress(vaultPDA, USDC_MINT);
       const recipientTokenAccount = findAssociatedTokenAddress(publicKey, USDC_MINT);
       const amountLamports = BigInt(Math.round(amount * 10 ** 6));
       const ix = await withdrawInstruction(
-        publicKey, vaultPDA, vaultTokenAccount, recipientTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
+        publicKey, vaultPDA, subAccountPubkey, vaultTokenAccount, recipientTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
       );
       const sig = await sendAndConfirm(connection, ix, signTransaction, publicKey);
       await refresh();

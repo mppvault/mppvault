@@ -5,6 +5,7 @@ export interface SubAccount {
   balance: number;
   totalBudget: number;
   spent: number;
+  spentToday: number;
   maxPerTx: number;
   maxPerHour: number;
   maxPerDay: number;
