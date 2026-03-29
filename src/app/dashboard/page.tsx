@@ -347,7 +347,7 @@ export default function DashboardPage() {
             </div>
 
             <p className="text-[12px] text-neutral-500 mb-5">
-              send USDC to this address from Phantom, an exchange, or any Solana wallet. funds arrive in your vault automatically.
+              to fund an agent, you need USDC in your <strong className="text-white">Phantom wallet</strong>. send USDC here from an exchange or another wallet, then use <strong className="text-white">fund this agent</strong> on the sub-account page.
             </p>
 
             <div className="rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-4 mb-3">

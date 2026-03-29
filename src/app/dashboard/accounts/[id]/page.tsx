@@ -37,7 +37,12 @@ export default function AccountDetailPage({
       setShowFund(false);
       setFundAmount("");
     } catch (e: unknown) {
-      setFundError(e instanceof Error ? e.message : "Transaction failed");
+      const msg = e instanceof Error ? e.message : "Transaction failed";
+      if (msg.includes("AccountNotInitialized") || msg.includes("from_token_account")) {
+        setFundError("your Phantom wallet doesn't have a USDC account. buy USDC on Jupiter first, then try again.");
+      } else {
+        setFundError(msg);
+      }
     } finally {
       setFundLoading(false);
     }
@@ -217,8 +222,17 @@ export default function AccountDetailPage({
               <button onClick={() => { setShowFund(false); setFundError(""); }} className="text-neutral-600 hover:text-white transition-colors text-[18px]">×</button>
             </div>
             <p className="text-[12px] text-neutral-500 mb-4">
-              USDC will be moved from your vault into <strong className="text-white">{account.name}</strong>&apos;s balance. make sure your vault has enough USDC first.
+              USDC will be sent from your <strong className="text-white">Phantom wallet</strong> directly into <strong className="text-white">{account.name}</strong>&apos;s balance on-chain.
             </p>
+            <div className="flex items-start gap-2 rounded-xl bg-[var(--accent)]/[0.06] border border-[var(--accent)]/[0.12] px-4 py-3 mb-4">
+              <span className="text-[var(--accent)] text-[13px] mt-0.5">◈</span>
+              <p className="text-[11px] text-[var(--accent)]/80 leading-relaxed">
+                you need USDC in your connected Phantom wallet. don&apos;t have any?{" "}
+                <a href="https://jup.ag/swap/SOL-USDC" target="_blank" rel="noopener noreferrer" className="underline">
+                  buy on Jupiter ↗
+                </a>
+              </p>
+            </div>
             <div className="flex items-center gap-2 rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-3 mb-4">
               <span className="text-[13px] text-neutral-500">$</span>
               <input
