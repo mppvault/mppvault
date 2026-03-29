@@ -20,7 +20,28 @@ export default function AccountDetailPage({
     setSpendingRules,
     addToWhitelist,
     removeFromWhitelist,
+    deposit,
   } = useVault();
+
+  const [showFund, setShowFund] = useState(false);
+  const [fundAmount, setFundAmount] = useState("");
+  const [fundLoading, setFundLoading] = useState(false);
+  const [fundError, setFundError] = useState("");
+
+  const handleFund = async (accountId: string) => {
+    if (!fundAmount || isNaN(Number(fundAmount)) || Number(fundAmount) <= 0) return;
+    setFundLoading(true);
+    setFundError("");
+    try {
+      await deposit(Number(fundAmount), accountId);
+      setShowFund(false);
+      setFundAmount("");
+    } catch (e: unknown) {
+      setFundError(e instanceof Error ? e.message : "Transaction failed");
+    } finally {
+      setFundLoading(false);
+    }
+  };
 
   const [showRules, setShowRules] = useState(false);
   const [maxPerTx, setMaxPerTx] = useState("");
@@ -157,6 +178,14 @@ export default function AccountDetailPage({
         </div>
 
         <div className="flex items-center gap-2">
+          {isOnChain && (
+            <button
+              onClick={() => setShowFund(!showFund)}
+              className="btn-primary text-[13px]"
+            >
+              fund this agent
+            </button>
+          )}
           {account.status === "active" && (
             <button
               onClick={handlePause}
@@ -178,6 +207,39 @@ export default function AccountDetailPage({
           </button>
         </div>
       </div>
+
+      {/* Fund this agent modal */}
+      {showFund && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="liquid-glass rounded-2xl p-7 w-full max-w-sm mx-4">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-[15px] font-semibold tracking-tight">fund this agent</h3>
+              <button onClick={() => { setShowFund(false); setFundError(""); }} className="text-neutral-600 hover:text-white transition-colors text-[18px]">×</button>
+            </div>
+            <p className="text-[12px] text-neutral-500 mb-4">
+              USDC will be moved from your vault into <strong className="text-white">{account.name}</strong>&apos;s balance. make sure your vault has enough USDC first.
+            </p>
+            <div className="flex items-center gap-2 rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-3 mb-4">
+              <span className="text-[13px] text-neutral-500">$</span>
+              <input
+                type="number" placeholder="0.00"
+                value={fundAmount} onChange={(e) => setFundAmount(e.target.value)}
+                className="flex-1 bg-transparent text-[14px] text-white outline-none placeholder-neutral-700 num"
+                min="0" step="0.01"
+              />
+              <span className="text-[11px] text-neutral-600">USDC</span>
+            </div>
+            {fundError && <p className="text-[11px] text-red-400 mb-3">{fundError}</p>}
+            <button
+              onClick={() => handleFund(account.id)}
+              disabled={fundLoading || !fundAmount}
+              className="w-full btn-primary text-[13px] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {fundLoading ? "confirming..." : "fund agent"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

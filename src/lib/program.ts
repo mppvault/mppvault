@@ -220,6 +220,7 @@ export async function addWhitelistInstruction(
 export async function depositInstruction(
   authority: PublicKey,
   vault: PublicKey,
+  subAccount: PublicKey,
   vaultTokenAccount: PublicKey,
   depositorTokenAccount: PublicKey,
   tokenProgram: PublicKey,
@@ -228,10 +229,11 @@ export async function depositInstruction(
   return new TransactionInstruction({
     programId: PROGRAM_ID,
     keys: [
-      { pubkey: authority, isSigner: true, isWritable: false },
+      { pubkey: authority, isSigner: true, isWritable: true },
       { pubkey: vault, isSigner: false, isWritable: true },
-      { pubkey: vaultTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: subAccount, isSigner: false, isWritable: true },
       { pubkey: depositorTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: vaultTokenAccount, isSigner: false, isWritable: true },
       { pubkey: tokenProgram, isSigner: false, isWritable: false },
     ],
     data: Buffer.concat([

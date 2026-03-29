@@ -6,47 +6,44 @@ import StatCard from "@/components/dashboard/StatCard";
 import { useVault } from "@/lib/useVault";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { PublicKey } from "@solana/web3.js";
+import { findVaultPDA } from "@/lib/program";
+
+const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bwd");
+
+function findATA(wallet: PublicKey, mint: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [wallet.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+  )[0];
+}
 
 export default function DashboardPage() {
-  const { connected } = useWallet();
+  const { connected, publicKey } = useWallet();
   const { setVisible } = useWalletModal();
-  const { vault, subAccounts, transactions, loading, isOnChain, createVault, deposit, withdraw } =
-    useVault();
+  const { vault, subAccounts, transactions, loading, isOnChain, createVault } = useVault();
 
-  const [showDeposit, setShowDeposit] = useState(false);
-  const [showWithdraw, setShowWithdraw] = useState(false);
-  const [amount, setAmount] = useState("");
-  const [txLoading, setTxLoading] = useState(false);
-  const [txError, setTxError] = useState("");
+  const [showReceive, setShowReceive] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const handleDeposit = async () => {
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return;
-    setTxLoading(true);
-    setTxError("");
-    try {
-      await deposit(Number(amount));
-      setShowDeposit(false);
-      setAmount("");
-    } catch (e: unknown) {
-      setTxError(e instanceof Error ? e.message : "Transaction failed");
-    } finally {
-      setTxLoading(false);
-    }
-  };
+  const vaultUsdcAddress = publicKey
+    ? (() => {
+        try {
+          const [vaultPDA] = findVaultPDA(publicKey);
+          return findATA(vaultPDA, USDC_MINT).toBase58();
+        } catch {
+          return null;
+        }
+      })()
+    : null;
 
-  const handleWithdraw = async () => {
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return;
-    setTxLoading(true);
-    setTxError("");
-    try {
-      await withdraw(Number(amount));
-      setShowWithdraw(false);
-      setAmount("");
-    } catch (e: unknown) {
-      setTxError(e instanceof Error ? e.message : "Transaction failed");
-    } finally {
-      setTxLoading(false);
-    }
+  const copyAddress = () => {
+    if (!vaultUsdcAddress) return;
+    navigator.clipboard.writeText(vaultUsdcAddress);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (!connected) {
@@ -107,20 +104,12 @@ export default function DashboardPage() {
           </button>
         )}
         {isOnChain && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => { setShowWithdraw(true); setShowDeposit(false); setAmount(""); setTxError(""); }}
-              className="rounded-xl border border-white/[0.08] px-4 py-2 text-[13px] text-neutral-400 hover:text-white hover:border-white/20 transition-all"
-            >
-              withdraw
-            </button>
-            <button
-              onClick={() => { setShowDeposit(true); setShowWithdraw(false); setAmount(""); setTxError(""); }}
-              className="btn-primary text-[13px]"
-            >
-              deposit USDC
-            </button>
-          </div>
+          <button
+            onClick={() => setShowReceive(!showReceive)}
+            className="btn-primary text-[13px]"
+          >
+            receive USDC
+          </button>
         )}
       </div>
 
@@ -343,57 +332,44 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Deposit / Withdraw Modal */}
-      {(showDeposit || showWithdraw) && (
+      {/* Receive USDC Panel */}
+      {showReceive && vaultUsdcAddress && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="liquid-glass rounded-2xl p-7 w-full max-w-sm mx-4">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-[15px] font-semibold tracking-tight">
-                {showDeposit ? "deposit USDC" : "withdraw USDC"}
-              </h3>
+              <h3 className="text-[15px] font-semibold tracking-tight">fund your vault</h3>
               <button
-                onClick={() => { setShowDeposit(false); setShowWithdraw(false); setTxError(""); }}
+                onClick={() => setShowReceive(false)}
                 className="text-neutral-600 hover:text-white transition-colors text-[18px]"
               >
                 ×
               </button>
             </div>
-            <p className="text-[12px] text-neutral-500 mb-4">
-              {showDeposit
-                ? "USDC will be pulled from your connected Phantom wallet and deposited into your vault."
-                : "USDC will be sent from your vault back to your connected wallet."}
+
+            <p className="text-[12px] text-neutral-500 mb-5">
+              send USDC to this address from Phantom, an exchange, or any Solana wallet. funds arrive in your vault automatically.
             </p>
-            {showDeposit && (
-              <div className="flex items-center gap-2 rounded-xl bg-[var(--accent)]/[0.06] border border-[var(--accent)]/[0.12] px-4 py-3 mb-4">
-                <span className="text-[var(--accent)] text-[13px]">◈</span>
-                <p className="text-[11px] text-[var(--accent)]/80">
-                  make sure your Phantom wallet has USDC before depositing. you can buy USDC on any Solana DEX.
-                </p>
-              </div>
-            )}
-            <div className="flex items-center gap-2 rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-3 mb-4">
-              <span className="text-[13px] text-neutral-500">$</span>
-              <input
-                type="number"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="flex-1 bg-transparent text-[14px] text-white outline-none placeholder-neutral-700 num"
-                min="0"
-                step="0.01"
-              />
-              <span className="text-[11px] text-neutral-600">USDC</span>
+
+            <div className="rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-4 mb-3">
+              <p className="text-[10px] text-neutral-600 uppercase tracking-[0.1em] mb-2">vault USDC address</p>
+              <p className="text-[12px] text-white font-mono break-all leading-relaxed">
+                {vaultUsdcAddress}
+              </p>
             </div>
-            {txError && (
-              <p className="text-[11px] text-red-400 mb-3">{txError}</p>
-            )}
+
             <button
-              onClick={showDeposit ? handleDeposit : handleWithdraw}
-              disabled={txLoading || !amount}
-              className="w-full btn-primary text-[13px] disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={copyAddress}
+              className="w-full btn-primary text-[13px]"
             >
-              {txLoading ? "confirming..." : showDeposit ? "deposit" : "withdraw"}
+              {copied ? "copied ✓" : "copy address"}
             </button>
+
+            <div className="mt-4 flex items-start gap-2 rounded-xl bg-[var(--accent)]/[0.06] border border-[var(--accent)]/[0.12] px-4 py-3">
+              <span className="text-[var(--accent)] text-[13px] mt-0.5">◈</span>
+              <p className="text-[11px] text-[var(--accent)]/80 leading-relaxed">
+                once USDC arrives, go to a sub-account and click <strong>fund this agent</strong> to allocate it.
+              </p>
+            </div>
           </div>
         </div>
       )}

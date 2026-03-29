@@ -350,14 +350,15 @@ export function useVault() {
   );
 
   const deposit = useCallback(
-    async (amount: number) => {
+    async (amount: number, subAccountId: string) => {
       if (!publicKey || !signTransaction) throw new Error("Wallet not connected");
       const [vaultPDA] = findVaultPDA(publicKey);
+      const subAccountPubkey = new PublicKey(subAccountId);
       const vaultTokenAccount = findAssociatedTokenAddress(vaultPDA, USDC_MINT);
       const depositorTokenAccount = findAssociatedTokenAddress(publicKey, USDC_MINT);
       const amountLamports = BigInt(Math.round(amount * 10 ** 6));
       const ix = await depositInstruction(
-        publicKey, vaultPDA, vaultTokenAccount, depositorTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
+        publicKey, vaultPDA, subAccountPubkey, vaultTokenAccount, depositorTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
       );
       const sig = await sendAndConfirm(connection, ix, signTransaction, publicKey);
       await refresh();
