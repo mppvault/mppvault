@@ -187,6 +187,8 @@ export function useVault() {
 
   useEffect(() => {
     refresh();
+    const interval = setInterval(refresh, 15_000);
+    return () => clearInterval(interval);
   }, [refresh]);
 
   const createVault = useCallback(
