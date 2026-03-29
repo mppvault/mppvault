@@ -49,7 +49,7 @@ function createAssociatedTokenAccountIdempotentIx(
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
-    data: new Uint8Array([1]),
+    data: Buffer.from([1]),
   });
 }
 
