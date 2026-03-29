@@ -158,7 +158,7 @@ export async function fetchRegistry(): Promise<{
   };
 }
 
-async function accountDiscriminator(name: string): string {
+async function accountDiscriminator(name: string): Promise<string> {
   const preimage = new TextEncoder().encode(`account:${name}`);
   const hashBuffer = await crypto.subtle.digest("SHA-256", new Uint8Array(preimage));
   const bytes = Array.from(new Uint8Array(hashBuffer).slice(0, 8));
