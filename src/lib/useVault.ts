@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
-import { PublicKey, Transaction, type TransactionInstruction } from "@solana/web3.js";
+import { PublicKey, Transaction, SystemProgram, TransactionInstruction } from "@solana/web3.js";
 import type { Connection } from "@solana/web3.js";
 import {
   getConnection,
@@ -31,6 +31,27 @@ function findAssociatedTokenAddress(wallet: PublicKey, mint: PublicKey): PublicK
     ASSOCIATED_TOKEN_PROGRAM_ID,
   )[0];
 }
+
+function createAssociatedTokenAccountIx(
+  payer: PublicKey,
+  owner: PublicKey,
+  mint: PublicKey,
+): TransactionInstruction {
+  const ata = findAssociatedTokenAddress(owner, mint);
+  return new TransactionInstruction({
+    programId: ASSOCIATED_TOKEN_PROGRAM_ID,
+    keys: [
+      { pubkey: payer, isSigner: true, isWritable: true },
+      { pubkey: ata, isSigner: false, isWritable: true },
+      { pubkey: owner, isSigner: false, isWritable: false },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data: Buffer.alloc(0),
+  });
+}
+
 import {
   fetchVault,
   fetchSubAccounts,
@@ -56,11 +77,13 @@ export interface VaultData {
 
 async function sendAndConfirm(
   connection: Connection,
-  ix: TransactionInstruction,
+  ix: TransactionInstruction | TransactionInstruction[],
   signTransaction: (tx: Transaction) => Promise<Transaction>,
   payer: PublicKey,
 ) {
-  const tx = new Transaction().add(ix);
+  const tx = new Transaction();
+  const ixs = Array.isArray(ix) ? ix : [ix];
+  for (const i of ixs) tx.add(i);
   tx.feePayer = payer;
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
   const signed = await signTransaction(tx);
@@ -378,25 +401,27 @@ export function useVault() {
       const [vaultPDA] = findVaultPDA(publicKey);
       const subAccountPubkey = new PublicKey(subAccountId);
 
-      // find user's actual USDC token account dynamically
-      const userTokenAccounts = await conn.getTokenAccountsByOwner(publicKey, { mint: USDC_MINT });
-      if (userTokenAccounts.value.length === 0) {
-        throw new Error("no USDC found in your wallet. buy USDC on Jupiter first.");
-      }
-      const depositorTokenAccount = userTokenAccounts.value[0].pubkey;
+      const depositorTokenAccount = findAssociatedTokenAddress(publicKey, USDC_MINT);
+      const vaultTokenAccount = findAssociatedTokenAddress(vaultPDA, USDC_MINT);
 
-      // find vault's actual USDC token account dynamically
-      const vaultTokenAccounts = await conn.getTokenAccountsByOwner(vaultPDA, { mint: USDC_MINT });
-      if (vaultTokenAccounts.value.length === 0) {
-        throw new Error("vault has no USDC token account yet. send USDC to the vault address first via 'receive USDC'.");
+      // create ATAs if they don't exist yet
+      const ixs: TransactionInstruction[] = [];
+
+      const userAtaInfo = await conn.getAccountInfo(depositorTokenAccount);
+      if (!userAtaInfo) {
+        ixs.push(createAssociatedTokenAccountIx(publicKey, publicKey, USDC_MINT));
       }
-      const vaultTokenAccount = vaultTokenAccounts.value[0].pubkey;
+
+      const vaultAtaInfo = await conn.getAccountInfo(vaultTokenAccount);
+      if (!vaultAtaInfo) {
+        ixs.push(createAssociatedTokenAccountIx(publicKey, vaultPDA, USDC_MINT));
+      }
 
       const amountLamports = BigInt(Math.round(amount * 10 ** 6));
-      const ix = await depositInstruction(
+      ixs.push(await depositInstruction(
         publicKey, vaultPDA, subAccountPubkey, vaultTokenAccount, depositorTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
-      );
-      const sig = await sendAndConfirm(conn, ix, signTransaction, publicKey);
+      ));
+      const sig = await sendAndConfirm(conn, ixs, signTransaction, publicKey);
       await refresh();
       return sig;
     },
