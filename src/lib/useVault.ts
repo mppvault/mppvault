@@ -434,14 +434,6 @@ export function useVault() {
       const depositorTokenAccount = sorted[0].pubkey;
       const depositorBalance = parseBalance(sorted[0].account.data);
 
-      console.log("=== DEPOSIT DEBUG ===");
-      console.log("amount input (UI):", amount, "amountLamports:", amountLamports.toString());
-      for (let i = 0; i < sorted.length; i++) {
-        const bal = parseBalance(sorted[i].account.data);
-        console.log(`USDC[${i}] ${sorted[i].pubkey.toBase58()} = ${Number(bal) / 1e6} USDC`);
-      }
-      console.log("Using:", depositorTokenAccount.toBase58(), "balance:", Number(depositorBalance) / 1e6, "USDC");
-
       if (depositorBalance < amountLamports) {
         throw new Error(`Insufficient USDC: have ${Number(depositorBalance) / 1e6}, need ${Number(amountLamports) / 1e6}`);
       }
@@ -454,23 +446,6 @@ export function useVault() {
       ixs.push(await depositInstruction(
         publicKey, vaultPDA, subAccountPubkey, depositorTokenAccount, vaultTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
       ));
-
-      // Simulate first to get detailed logs
-      const simTx = new Transaction();
-      for (const i of ixs) simTx.add(i);
-      simTx.feePayer = publicKey;
-      simTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-      try {
-        const sim = await connection.simulateTransaction(simTx);
-        console.log("Simulation result:", JSON.stringify(sim.value, null, 2));
-        if (sim.value.err) {
-          throw new Error(`Simulation failed: ${JSON.stringify(sim.value.err)}. Logs: ${(sim.value.logs ?? []).join(" | ")}`);
-        }
-      } catch (simErr: unknown) {
-        if (simErr instanceof Error && simErr.message.startsWith("Simulation failed:")) throw simErr;
-        console.error("Simulation error:", simErr);
-        throw new Error(`Deposit simulation error: ${simErr instanceof Error ? simErr.message : String(simErr)}`);
-      }
 
       const sig = await sendAndConfirm(connection, ixs, signTransaction, publicKey);
       await refresh();
