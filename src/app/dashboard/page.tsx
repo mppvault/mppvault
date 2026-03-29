@@ -6,87 +6,20 @@ import StatCard from "@/components/dashboard/StatCard";
 import { useVault } from "@/lib/useVault";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { PublicKey, Transaction, SystemProgram, TransactionInstruction } from "@solana/web3.js";
-import { findVaultPDA, getConnection } from "@/lib/program";
-
-const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
-const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bwd");
-
-function findATA(wallet: PublicKey, mint: PublicKey): PublicKey {
-  return PublicKey.findProgramAddressSync(
-    [wallet.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-  )[0];
-}
 
 export default function DashboardPage() {
-  const { connected, publicKey, signTransaction } = useWallet();
+  const { connected, publicKey } = useWallet();
   const { setVisible } = useWalletModal();
   const { vault, subAccounts, transactions, loading, isOnChain, createVault, refresh } = useVault();
 
-  const [showReceive, setShowReceive] = useState(false);
+  const [showFundInfo, setShowFundInfo] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [ataReady, setAtaReady] = useState(false);
-  const [ataCreating, setAtaCreating] = useState(false);
 
-  const vaultUsdcAddress = publicKey
-    ? (() => {
-        try {
-          const [vaultPDA] = findVaultPDA(publicKey);
-          return findATA(vaultPDA, USDC_MINT).toBase58();
-        } catch {
-          return null;
-        }
-      })()
-    : null;
-
-  const ensureVaultAta = async () => {
-    if (!publicKey || !signTransaction || !vaultUsdcAddress) return;
-    setAtaCreating(true);
-    try {
-      const conn = getConnection();
-      const [vaultPDA] = findVaultPDA(publicKey);
-      const ata = findATA(vaultPDA, USDC_MINT);
-      const info = await conn.getAccountInfo(ata);
-      if (info) {
-        setAtaReady(true);
-        return;
-      }
-      const ix = new TransactionInstruction({
-        programId: ASSOCIATED_TOKEN_PROGRAM_ID,
-        keys: [
-          { pubkey: publicKey, isSigner: true, isWritable: true },
-          { pubkey: ata, isSigner: false, isWritable: true },
-          { pubkey: vaultPDA, isSigner: false, isWritable: false },
-          { pubkey: USDC_MINT, isSigner: false, isWritable: false },
-          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-          { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-        ],
-        data: Buffer.alloc(0),
-      });
-      const tx = new Transaction().add(ix);
-      tx.feePayer = publicKey;
-      tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
-      const signed = await signTransaction(tx);
-      const sig = await conn.sendRawTransaction(signed.serialize(), { skipPreflight: true });
-      await conn.confirmTransaction(sig, "confirmed");
-      setAtaReady(true);
-    } catch {
-      // user rejected or error
-    } finally {
-      setAtaCreating(false);
-    }
-  };
-
-  const handleOpenReceive = async () => {
-    setShowReceive(true);
-    await ensureVaultAta();
-  };
+  const walletAddress = publicKey?.toBase58() ?? "";
 
   const copyAddress = () => {
-    if (!vaultUsdcAddress) return;
-    navigator.clipboard.writeText(vaultUsdcAddress);
+    if (!walletAddress) return;
+    navigator.clipboard.writeText(walletAddress);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -158,10 +91,10 @@ export default function DashboardPage() {
               ↻
             </button>
             <button
-              onClick={handleOpenReceive}
+              onClick={() => setShowFundInfo(true)}
               className="btn-primary text-[13px]"
             >
-              receive USDC
+              fund vault
             </button>
           </div>
         )}
@@ -386,91 +319,59 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Receive USDC Panel */}
-      {showReceive && vaultUsdcAddress && (
+      {showFundInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="liquid-glass rounded-2xl p-7 w-full max-w-sm mx-4">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-[15px] font-semibold tracking-tight">fund your vault</h3>
+              <h3 className="text-[15px] font-semibold tracking-tight">how to fund your agents</h3>
               <button
-                onClick={() => { setShowReceive(false); setAtaReady(false); }}
+                onClick={() => setShowFundInfo(false)}
                 className="text-neutral-600 hover:text-white transition-colors text-[18px]"
               >
                 ×
               </button>
             </div>
 
-            {ataCreating ? (
-              <div className="text-center py-6">
-                <p className="text-[13px] text-neutral-400 animate-pulse">preparing vault USDC account...</p>
-                <p className="text-[11px] text-neutral-600 mt-2">approve the transaction in your wallet</p>
+            <div className="space-y-4 mb-5">
+              <div className="rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-md bg-[var(--accent)]/[0.15] text-[var(--accent)] text-[10px] font-bold">1</span>
+                  <p className="text-[12px] text-white font-medium">get USDC in your Phantom wallet</p>
+                </div>
+                <p className="text-[11px] text-neutral-500 ml-7">
+                  send USDC to your connected wallet from an exchange, or swap SOL for USDC.
+                </p>
               </div>
-            ) : ataReady ? (
-              <>
-                <p className="text-[12px] text-neutral-500 mb-5">
-                  your vault USDC account is ready. send USDC to the address below from an exchange or another wallet.
+
+              <div className="rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-md bg-[var(--accent)]/[0.15] text-[var(--accent)] text-[10px] font-bold">2</span>
+                  <p className="text-[12px] text-white font-medium">fund an agent</p>
+                </div>
+                <p className="text-[11px] text-neutral-500 ml-7">
+                  go to a sub-account and click <strong className="text-white">fund this agent</strong>. USDC moves from your wallet into the vault automatically.
                 </p>
+              </div>
+            </div>
 
-                <div className="rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-4 mb-3">
-                  <p className="text-[10px] text-neutral-600 uppercase tracking-[0.1em] mb-2">vault USDC address</p>
-                  <p className="text-[12px] text-white font-mono break-all leading-relaxed">
-                    {vaultUsdcAddress}
-                  </p>
-                </div>
+            <div className="rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-3 mb-4">
+              <p className="text-[10px] text-neutral-600 uppercase tracking-[0.1em] mb-1">your wallet address</p>
+              <p className="text-[11px] text-white font-mono break-all leading-relaxed">{walletAddress}</p>
+            </div>
 
-                <button
-                  onClick={copyAddress}
-                  className="w-full btn-primary text-[13px]"
-                >
-                  {copied ? "copied ✓" : "copy address"}
-                </button>
+            <button onClick={copyAddress} className="w-full btn-primary text-[13px]">
+              {copied ? "copied ✓" : "copy wallet address"}
+            </button>
 
-                <div className="mt-4 flex items-start gap-2 rounded-xl bg-[var(--accent)]/[0.06] border border-[var(--accent)]/[0.12] px-4 py-3">
-                  <span className="text-[var(--accent)] text-[13px] mt-0.5">◈</span>
-                  <p className="text-[11px] text-[var(--accent)]/80 leading-relaxed">
-                    once USDC arrives, go to a sub-account and click <strong>fund this agent</strong> to allocate it.
-                  </p>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="text-[12px] text-neutral-500 mb-5">
-                  two ways to fund your agents:
-                </p>
-
-                <div className="space-y-3 mb-4">
-                  <div className="rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-3">
-                    <p className="text-[12px] text-white font-medium mb-1">option 1: fund directly from wallet</p>
-                    <p className="text-[11px] text-neutral-500">
-                      if you have USDC in your Phantom wallet, go to a sub-account and click <strong className="text-white">fund this agent</strong>. it transfers USDC straight from your wallet.
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-3">
-                    <p className="text-[12px] text-white font-medium mb-1">option 2: send from exchange</p>
-                    <p className="text-[11px] text-neutral-500 mb-2">
-                      to receive USDC from an exchange or external wallet, we need to create a vault token account first.
-                    </p>
-                    <button
-                      onClick={ensureVaultAta}
-                      className="w-full btn-primary text-[12px]"
-                    >
-                      create vault USDC account
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2 rounded-xl bg-[var(--accent)]/[0.06] border border-[var(--accent)]/[0.12] px-4 py-3">
-                  <span className="text-[var(--accent)] text-[13px] mt-0.5">◈</span>
-                  <p className="text-[11px] text-[var(--accent)]/80 leading-relaxed">
-                    don&apos;t have USDC?{" "}
-                    <a href="https://jup.ag/swap/SOL-USDC" target="_blank" rel="noopener noreferrer" className="underline">
-                      buy on Jupiter ↗
-                    </a>
-                  </p>
-                </div>
-              </>
-            )}
+            <div className="mt-4 flex items-start gap-2 rounded-xl bg-[var(--accent)]/[0.06] border border-[var(--accent)]/[0.12] px-4 py-3">
+              <span className="text-[var(--accent)] text-[13px] mt-0.5">◈</span>
+              <p className="text-[11px] text-[var(--accent)]/80 leading-relaxed">
+                don&apos;t have USDC?{" "}
+                <a href="https://jup.ag/swap/SOL-USDC" target="_blank" rel="noopener noreferrer" className="underline">
+                  swap on Jupiter ↗
+                </a>
+              </p>
+            </div>
           </div>
         </div>
       )}
