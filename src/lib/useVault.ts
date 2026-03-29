@@ -109,7 +109,18 @@ export function useVault() {
         const subs = await fetchSubAccounts(publicKey);
         const txs = await fetchTransactions(v.publicKey);
 
-        const totalBalance = subs.reduce((s, a) => s + a.balance, 0);
+        // fetch vault's actual USDC token balance
+        let vaultUsdcBalance = 0;
+        try {
+          const vaultPDA = v.publicKey;
+          const vaultTokenAccounts = await connection.getTokenAccountsByOwner(vaultPDA, { mint: USDC_MINT });
+          if (vaultTokenAccounts.value.length > 0) {
+            const bal = await connection.getTokenAccountBalance(vaultTokenAccounts.value[0].pubkey);
+            vaultUsdcBalance = Number(bal.value.uiAmount ?? 0);
+          }
+        } catch { /* no token account yet */ }
+
+        const totalBalance = vaultUsdcBalance || subs.reduce((s, a) => s + a.balance, 0);
         const activeAgents = subs.filter(
           (a) => a.status === "active",
         ).length;
@@ -354,8 +365,17 @@ export function useVault() {
       if (!publicKey || !signTransaction) throw new Error("Wallet not connected");
       const [vaultPDA] = findVaultPDA(publicKey);
       const subAccountPubkey = new PublicKey(subAccountId);
+
+      // find user's actual USDC token account dynamically
+      const userTokenAccounts = await connection.getTokenAccountsByOwner(publicKey, { mint: USDC_MINT });
+      if (userTokenAccounts.value.length === 0) {
+        throw new Error("no USDC found in your wallet. buy USDC on Jupiter first.");
+      }
+      const depositorTokenAccount = userTokenAccounts.value[0].pubkey;
+
+      // find or derive vault token account
       const vaultTokenAccount = findAssociatedTokenAddress(vaultPDA, USDC_MINT);
-      const depositorTokenAccount = findAssociatedTokenAddress(publicKey, USDC_MINT);
+
       const amountLamports = BigInt(Math.round(amount * 10 ** 6));
       const ix = await depositInstruction(
         publicKey, vaultPDA, subAccountPubkey, vaultTokenAccount, depositorTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
