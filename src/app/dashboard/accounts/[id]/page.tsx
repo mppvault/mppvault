@@ -167,23 +167,19 @@ export default function AccountDetailPage({
   };
 
   const toggleCapability = (cap: string) => {
-    setCatCapabilities((prev) =>
-      prev.includes(cap) ? prev.filter((c) => c !== cap) : [...prev, cap],
-    );
+    if (catCapabilities.includes(cap)) {
+      setCatCapabilities((prev) => prev.filter((c) => c !== cap));
+      setCatRateCards((prev) => prev.filter((rc) => rc.capability !== cap));
+    } else {
+      setCatCapabilities((prev) => [...prev, cap]);
+      setCatRateCards((prev) => [...prev, { capability: cap, priceUsdc: 0, unit: "per-call" }]);
+    }
   };
 
-  const addRateCard = () => {
-    setCatRateCards((prev) => [...prev, { capability: "", priceUsdc: 0, unit: "per-call" }]);
-  };
-
-  const updateRateCard = (idx: number, field: keyof RateCard, value: string | number) => {
+  const updateRateCard = (capability: string, field: "priceUsdc" | "unit", value: string | number) => {
     setCatRateCards((prev) =>
-      prev.map((rc, i) => (i === idx ? { ...rc, [field]: value } : rc)),
+      prev.map((rc) => (rc.capability === capability ? { ...rc, [field]: value } : rc)),
     );
-  };
-
-  const removeRateCard = (idx: number) => {
-    setCatRateCards((prev) => prev.filter((_, i) => i !== idx));
   };
 
   // Usage metrics computed from transactions
@@ -698,8 +694,9 @@ export default function AccountDetailPage({
               </div>
 
               <div>
-                <span className="text-[10px] text-neutral-600 uppercase tracking-[0.12em]">capabilities</span>
-                <div className="flex flex-wrap gap-1.5 mt-2">
+                <span className="text-[10px] text-neutral-600 uppercase tracking-[0.12em]">capabilities & pricing</span>
+                <p className="text-[11px] text-neutral-600 mt-1 mb-3">select capabilities and set a price for each one.</p>
+                <div className="flex flex-wrap gap-1.5 mb-4">
                   {ALL_CAPABILITIES.map((cap) => (
                     <button
                       key={cap}
@@ -714,48 +711,36 @@ export default function AccountDetailPage({
                     </button>
                   ))}
                 </div>
-              </div>
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-neutral-600 uppercase tracking-[0.12em]">rate cards</span>
-                  <button onClick={addRateCard} className="text-[11px] text-[var(--accent)] hover:underline">+ add</button>
-                </div>
-                <div className="space-y-2 mt-2">
-                  {catRateCards.map((rc, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <select
-                        value={rc.capability}
-                        onChange={(e) => updateRateCard(idx, "capability", e.target.value)}
-                        className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-[12px] text-white outline-none flex-1"
-                      >
-                        <option value="">select capability</option>
-                        {catCapabilities.map((cap) => (
-                          <option key={cap} value={cap}>{cap}</option>
-                        ))}
-                      </select>
-                      <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2">
-                        <span className="text-[12px] text-neutral-500">$</span>
+                {catRateCards.length > 0 && (
+                  <div className="space-y-2">
+                    {catRateCards.map((rc) => (
+                      <div key={rc.capability} className="flex items-center gap-2 rounded-xl bg-white/[0.02] border border-white/[0.04] px-4 py-3">
+                        <span className="text-[12px] text-[var(--accent)] flex-1">{rc.capability}</span>
+                        <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-1.5">
+                          <span className="text-[12px] text-neutral-500">$</span>
+                          <input
+                            type="number"
+                            placeholder="0.00"
+                            value={rc.priceUsdc || ""}
+                            onChange={(e) => updateRateCard(rc.capability, "priceUsdc", Number(e.target.value))}
+                            className="bg-transparent text-[12px] text-white outline-none w-16 num"
+                            step="0.001"
+                          />
+                        </div>
+                        <span className="text-[10px] text-neutral-600">/</span>
                         <input
-                          type="number"
-                          placeholder="0.00"
-                          value={rc.priceUsdc || ""}
-                          onChange={(e) => updateRateCard(idx, "priceUsdc", Number(e.target.value))}
-                          className="bg-transparent text-[12px] text-white outline-none w-16 num"
-                          step="0.001"
+                          type="text"
+                          placeholder="per-call"
+                          value={rc.unit}
+                          onChange={(e) => updateRateCard(rc.capability, "unit", e.target.value)}
+                          className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-1.5 text-[12px] text-white outline-none w-24"
                         />
+                        <button onClick={() => toggleCapability(rc.capability)} className="text-[11px] text-neutral-600 hover:text-red-400 ml-1">×</button>
                       </div>
-                      <input
-                        type="text"
-                        placeholder="per-call"
-                        value={rc.unit}
-                        onChange={(e) => updateRateCard(idx, "unit", e.target.value)}
-                        className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-[12px] text-white outline-none w-24"
-                      />
-                      <button onClick={() => removeRateCard(idx)} className="text-[11px] text-neutral-600 hover:text-red-400">×</button>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>
