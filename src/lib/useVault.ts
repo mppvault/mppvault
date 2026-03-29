@@ -374,24 +374,29 @@ export function useVault() {
   const deposit = useCallback(
     async (amount: number, subAccountId: string) => {
       if (!publicKey || !signTransaction) throw new Error("Wallet not connected");
+      const conn = getConnection();
       const [vaultPDA] = findVaultPDA(publicKey);
       const subAccountPubkey = new PublicKey(subAccountId);
 
       // find user's actual USDC token account dynamically
-      const userTokenAccounts = await connection.getTokenAccountsByOwner(publicKey, { mint: USDC_MINT });
+      const userTokenAccounts = await conn.getTokenAccountsByOwner(publicKey, { mint: USDC_MINT });
       if (userTokenAccounts.value.length === 0) {
         throw new Error("no USDC found in your wallet. buy USDC on Jupiter first.");
       }
       const depositorTokenAccount = userTokenAccounts.value[0].pubkey;
 
-      // find or derive vault token account
-      const vaultTokenAccount = findAssociatedTokenAddress(vaultPDA, USDC_MINT);
+      // find vault's actual USDC token account dynamically
+      const vaultTokenAccounts = await conn.getTokenAccountsByOwner(vaultPDA, { mint: USDC_MINT });
+      if (vaultTokenAccounts.value.length === 0) {
+        throw new Error("vault has no USDC token account yet. send USDC to the vault address first via 'receive USDC'.");
+      }
+      const vaultTokenAccount = vaultTokenAccounts.value[0].pubkey;
 
       const amountLamports = BigInt(Math.round(amount * 10 ** 6));
       const ix = await depositInstruction(
         publicKey, vaultPDA, subAccountPubkey, vaultTokenAccount, depositorTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
       );
-      const sig = await sendAndConfirm(connection, ix, signTransaction, publicKey);
+      const sig = await sendAndConfirm(conn, ix, signTransaction, publicKey);
       await refresh();
       return sig;
     },
