@@ -370,6 +370,7 @@ export default function Home() {
                     <p className="text-[10px] text-neutral-600 tracking-[0.15em] uppercase font-medium mb-4">Product</p>
                     <div className="flex flex-col gap-2.5">
                       <Link href="/features" className="text-[12px] text-neutral-500 hover:text-white transition-colors">Features</Link>
+                      <Link href="/registry" className="text-[12px] text-neutral-500 hover:text-white transition-colors">Agent Registry</Link>
                       <Link href="/dashboard" className="text-[12px] text-neutral-500 hover:text-white transition-colors">Dashboard</Link>
                     </div>
                   </div>

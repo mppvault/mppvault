@@ -26,6 +26,7 @@ const phases = [
     status: "building",
     description: "Making it easy for developers to connect any AI agent to MPP Vault with minimal setup.",
     items: [
+      "Agent Registry — public on-chain directory with verified spending history and trust scores",
       "MCP server — connect MPP Vault directly to Claude, GPT, and other agents",
       "TypeScript SDK — execute_payment in a single function call",
       "Developer documentation — integrate in under 10 minutes",
