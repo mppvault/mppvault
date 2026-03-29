@@ -360,9 +360,17 @@ export default function DashboardPage() {
             </div>
             <p className="text-[12px] text-neutral-500 mb-4">
               {showDeposit
-                ? "deposit USDC into your vault. funds will be available for sub-accounts."
-                : "withdraw USDC from your vault back to your wallet."}
+                ? "USDC will be pulled from your connected Phantom wallet and deposited into your vault."
+                : "USDC will be sent from your vault back to your connected wallet."}
             </p>
+            {showDeposit && (
+              <div className="flex items-center gap-2 rounded-xl bg-[var(--accent)]/[0.06] border border-[var(--accent)]/[0.12] px-4 py-3 mb-4">
+                <span className="text-[var(--accent)] text-[13px]">◈</span>
+                <p className="text-[11px] text-[var(--accent)]/80">
+                  make sure your Phantom wallet has USDC before depositing. you can buy USDC on any Solana DEX.
+                </p>
+              </div>
+            )}
             <div className="flex items-center gap-2 rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-3 mb-4">
               <span className="text-[13px] text-neutral-500">$</span>
               <input
