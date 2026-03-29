@@ -35,14 +35,14 @@ const steps = [
   },
   {
     num: "06",
-    title: "Deposit USDC",
-    desc: "Transfer USDC from your wallet into the vault. The balance is distributed across sub-accounts based on their budgets.",
+    title: "Fund each agent",
+    desc: "Open a sub-account and click \"fund this agent\". Send USDC from your Phantom wallet directly into that agent's balance. Each agent is funded individually — you control exactly how much each one can spend.",
     done: () => false,
   },
   {
     num: "07",
     title: "Let agents transact",
-    desc: "Give each agent its sub-account address and your vault program ID. The agent calls execute_payment to pay for services — rules are checked automatically on-chain.",
+    desc: "Give each agent its sub-account address and your vault program ID (find these at the bottom of the sub-account page). The agent calls execute_payment — rules are checked automatically on-chain.",
     done: () => false,
   },
 ];
