@@ -109,18 +109,16 @@ export function useVault() {
         const subs = await fetchSubAccounts(publicKey);
         const txs = await fetchTransactions(v.publicKey);
 
-        // fetch vault's actual USDC token balance
+        // fetch vault's actual USDC token balance from ATA
         let vaultUsdcBalance = 0;
         try {
-          const vaultPDA = v.publicKey;
-          const vaultTokenAccounts = await connection.getTokenAccountsByOwner(vaultPDA, { mint: USDC_MINT });
-          if (vaultTokenAccounts.value.length > 0) {
-            const bal = await connection.getTokenAccountBalance(vaultTokenAccounts.value[0].pubkey);
-            vaultUsdcBalance = Number(bal.value.uiAmount ?? 0);
-          }
-        } catch { /* no token account yet */ }
+          const conn = getConnection();
+          const vaultATA = findAssociatedTokenAddress(v.publicKey, USDC_MINT);
+          const bal = await conn.getTokenAccountBalance(vaultATA);
+          vaultUsdcBalance = Number(bal.value.uiAmount ?? 0);
+        } catch { /* ATA not initialized yet */ }
 
-        const totalBalance = vaultUsdcBalance || subs.reduce((s, a) => s + a.balance, 0);
+        const totalBalance = vaultUsdcBalance > 0 ? vaultUsdcBalance : subs.reduce((s, a) => s + a.balance, 0);
         const activeAgents = subs.filter(
           (a) => a.status === "active",
         ).length;
