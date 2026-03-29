@@ -32,6 +32,8 @@ function findAssociatedTokenAddress(wallet: PublicKey, mint: PublicKey): PublicK
   )[0];
 }
 
+const SYSVAR_RENT = new PublicKey("SysvarRent111111111111111111111111111111111");
+
 function createAssociatedTokenAccountIx(
   payer: PublicKey,
   owner: PublicKey,
@@ -47,8 +49,9 @@ function createAssociatedTokenAccountIx(
       { pubkey: mint, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_RENT, isSigner: false, isWritable: false },
     ],
-    data: Buffer.alloc(0),
+    data: Buffer.from([1]),
   });
 }
 
