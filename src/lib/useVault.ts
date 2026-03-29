@@ -5,6 +5,7 @@ import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey, Transaction, SystemProgram, TransactionInstruction } from "@solana/web3.js";
 import type { Connection } from "@solana/web3.js";
 import {
+  PROGRAM_ID,
   getConnection,
   findVaultPDA,
   findSubAccountPDA,
@@ -419,7 +420,7 @@ export function useVault() {
 
       const userAtaInfo = await connection.getAccountInfo(depositorTokenAccount);
       if (!userAtaInfo) {
-        ixs.push(createAssociatedTokenAccountIx(publicKey, publicKey, USDC_MINT));
+        throw new Error("You don't have a USDC account. Buy or receive USDC in your Phantom wallet first, then try again.");
       }
 
       const vaultAtaInfo = await connection.getAccountInfo(vaultTokenAccount);
@@ -431,9 +432,20 @@ export function useVault() {
       ixs.push(await depositInstruction(
         publicKey, vaultPDA, subAccountPubkey, depositorTokenAccount, vaultTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
       ));
-      const sig = await sendAndConfirm(connection, ixs, signTransaction, publicKey);
-      await refresh();
-      return sig;
+
+      try {
+        const sig = await sendAndConfirm(connection, ixs, signTransaction, publicKey);
+        await refresh();
+        return sig;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("does not exist")) {
+          throw new Error(
+            `Transaction failed: a program could not be loaded. This usually means the vault program (${PROGRAM_ID.toBase58().slice(0, 8)}...) is not deployed on this network. Check that your RPC URL and program ID match the same network (mainnet/devnet).`
+          );
+        }
+        throw err;
+      }
     },
     [publicKey, signTransaction, connection, refresh],
   );
