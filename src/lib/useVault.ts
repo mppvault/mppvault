@@ -442,13 +442,25 @@ export function useVault() {
       ));
 
       console.log("=== DEPOSIT DEBUG ===");
+      console.log("amount input (UI):", amount);
+      console.log("amountLamports (raw):", amountLamports.toString());
+
+      console.log("=== USDC ACCOUNTS ===");
+      const allUsdcAccounts = await connection.getTokenAccountsByOwner(publicKey, { mint: USDC_MINT });
+      for (let i = 0; i < allUsdcAccounts.value.length; i++) {
+        const acc = allUsdcAccounts.value[i];
+        const rawAmount = BigInt("0x" + Buffer.from(acc.account.data.slice(64, 72)).reverse().toString("hex"));
+        console.log(`[${i}] pubkey: ${acc.pubkey.toBase58()}`);
+        console.log(`[${i}] amount: ${rawAmount.toString()} (${Number(rawAmount) / 1e6} USDC)`);
+      }
+      console.log("depositorTokenAccount in use:", depositorTokenAccount.toBase58());
+
       console.log("PROGRAM_ID:", PROGRAM_ID.toBase58());
       console.log("TOKEN_PROGRAM_ID:", TOKEN_PROGRAM_ID.toBase58());
       console.log("ASSOC_TOKEN_PROGRAM:", ASSOCIATED_TOKEN_PROGRAM_ID.toBase58());
       console.log("authority:", publicKey.toBase58());
       console.log("vault PDA:", vaultPDA.toBase58());
       console.log("subAccount:", subAccountPubkey.toBase58());
-      console.log("depositorTokenAccount:", depositorTokenAccount.toBase58());
       console.log("vaultTokenAccount:", vaultTokenAccount.toBase58());
       console.log("USDC_MINT:", USDC_MINT.toBase58());
       console.log("vault ATA exists:", !!vaultAtaInfo);
