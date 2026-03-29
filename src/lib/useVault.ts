@@ -33,9 +33,7 @@ function findAssociatedTokenAddress(wallet: PublicKey, mint: PublicKey): PublicK
   )[0];
 }
 
-const SYSVAR_RENT = new PublicKey("SysvarRent111111111111111111111111111111111");
-
-function createAssociatedTokenAccountIx(
+function createAssociatedTokenAccountIdempotentIx(
   payer: PublicKey,
   owner: PublicKey,
   mint: PublicKey,
@@ -50,9 +48,8 @@ function createAssociatedTokenAccountIx(
       { pubkey: mint, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-      { pubkey: SYSVAR_RENT, isSigner: false, isWritable: false },
     ],
-    data: Buffer.from([1]),
+    data: new Uint8Array([1]),
   });
 }
 
@@ -413,19 +410,23 @@ export function useVault() {
       const [vaultPDA] = findVaultPDA(publicKey);
       const subAccountPubkey = new PublicKey(subAccountId);
 
-      const depositorTokenAccount = findAssociatedTokenAddress(publicKey, USDC_MINT);
       const vaultTokenAccount = findAssociatedTokenAddress(vaultPDA, USDC_MINT);
 
       const ixs: TransactionInstruction[] = [];
 
-      const userAtaInfo = await connection.getAccountInfo(depositorTokenAccount);
-      if (!userAtaInfo) {
-        throw new Error("You don't have a USDC account. Buy or receive USDC in your Phantom wallet first, then try again.");
+      // Find user's actual USDC token account
+      let depositorTokenAccount: PublicKey;
+      const userAccounts = await connection.getTokenAccountsByOwner(publicKey, { mint: USDC_MINT });
+      if (userAccounts.value.length > 0) {
+        depositorTokenAccount = userAccounts.value[0].pubkey;
+      } else {
+        throw new Error("No USDC found in your wallet. Buy or receive USDC first.");
       }
 
+      // Create vault ATA if needed
       const vaultAtaInfo = await connection.getAccountInfo(vaultTokenAccount);
       if (!vaultAtaInfo) {
-        ixs.push(createAssociatedTokenAccountIx(publicKey, vaultPDA, USDC_MINT));
+        ixs.push(createAssociatedTokenAccountIdempotentIx(publicKey, vaultPDA, USDC_MINT));
       }
 
       const amountLamports = BigInt(Math.round(amount * 10 ** 6));
@@ -433,19 +434,9 @@ export function useVault() {
         publicKey, vaultPDA, subAccountPubkey, depositorTokenAccount, vaultTokenAccount, TOKEN_PROGRAM_ID, amountLamports,
       ));
 
-      try {
-        const sig = await sendAndConfirm(connection, ixs, signTransaction, publicKey);
-        await refresh();
-        return sig;
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("does not exist")) {
-          throw new Error(
-            `Transaction failed: a program could not be loaded. This usually means the vault program (${PROGRAM_ID.toBase58().slice(0, 8)}...) is not deployed on this network. Check that your RPC URL and program ID match the same network (mainnet/devnet).`
-          );
-        }
-        throw err;
-      }
+      const sig = await sendAndConfirm(connection, ixs, signTransaction, publicKey);
+      await refresh();
+      return sig;
     },
     [publicKey, signTransaction, connection, refresh],
   );
